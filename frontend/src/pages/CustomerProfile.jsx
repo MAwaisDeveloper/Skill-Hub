@@ -10,8 +10,67 @@ export default function CustomerProfile() {
   const [profile, setProfile] = useState({});
   const [addresses, setAddresses] = useState([]);
   const [form, setForm] = useState({ label: 'home', area: '', full_address: '', latitude: '', longitude: '' });
+  const [locating, setLocating] = useState(false);
+  const [geoMsg, setGeoMsg] = useState('');
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+
+  // Free geocoding chain (no API key, sara free):
+  // 1) Photon (komoot) — fuzzy/partial addresses behtar samajhta hai (PK par strong)
+  // 2) Nominatim fallback — countrycodes=pk ke sath
+  // 3) Area-only fallback — sirf area search (e.g. "Johar Town Lahore")
+  const confirmLocation = async () => {
+    setError(''); setGeoMsg('');
+    if (!form.full_address?.trim()) { setError('Enter the Full Address first'); return; }
+    setLocating(true);
+    const pick = (p) => {
+      const lat = Number(p.lat ?? p.geometry?.coordinates?.[1]);
+      const lng = Number(p.lon ?? p.geometry?.coordinates?.[0]);
+      return lat && lng ? { lat: lat.toFixed(7), lng: lng.toFixed(7), label: p.display_name || [p.name, p.city, p.state].filter(Boolean).join(', ') } : null;
+    };
+    try {
+      let hit = null;
+      const full = form.full_address.trim();
+      const area = (form.area || '').trim();
+      const fromFeature = (f, suffix = '') => {
+        if (!f?.geometry?.coordinates) return null;
+        const [lng, lat] = f.geometry.coordinates;
+        if (!lat || !lng) return null;
+        const p = f.properties || {};
+        return { lat: lat.toFixed(7), lng: lng.toFixed(7), label: [p.name, p.street, p.city, p.state].filter(Boolean).join(', ') + suffix };
+      };
+      const photon = async (q) => {
+        try {
+          const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1&lat=31.5155&lon=74.3436`);
+          const d = await r.json();
+          return d.features?.length ? d.features[0] : null;
+        } catch { return null; }
+      };
+      // 1) Full address (area ke sath)
+      let f = await photon([full, area].filter(Boolean).join(', ') + ', Lahore, Pakistan');
+      // 2) Sirf full address
+      if (!f) f = await photon(full + ', Lahore, Pakistan');
+      // 3) Area-only (full address bohat specific/typo ho to) — user ka exact case
+      if (!f && area) f = await photon(area + ' Lahore Pakistan');
+      // 4) Area ke pehle 3 words
+      if (!f && area) f = await photon(area.split(/\s+/).slice(0, 3).join(' ') + ' Lahore Pakistan');
+      if (f) {
+        hit = fromFeature(f);
+        // agar ye area-level result hai (full address se match nahi hua) to note
+        const usedAreaFallback = area && f.properties?.name && !full.toLowerCase().includes(String(f.properties.name).toLowerCase());
+        if (hit && usedAreaFallback) hit.label += ' (area-level pin — drag on the map to fine-tune)';
+      }
+      if (hit) {
+        setForm((prev) => ({ ...prev, latitude: String(hit.lat), longitude: String(hit.lng) }));
+        setGeoMsg(`✓ Location found: ${hit.label?.slice(0, 100)} — the pin is on the map; drag it to adjust, then press Add Address`);
+      } else {
+        setGeoMsg('✗ Exact match not found — click on the map to drop the pin manually, then press Add Address.');
+      }
+    } catch {
+      setGeoMsg('Could not reach the location service — drop the pin manually on the map.');
+    }
+    setLocating(false);
+  };
 
   const load = async () => {
     try {
@@ -48,6 +107,7 @@ export default function CustomerProfile() {
     <Layout title="Profile & Addresses" subtitle="Your account details, trust score and saved service locations">
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
+      {geoMsg && <div className="alert info">{geoMsg}</div>}
 
       <div className="grid cols-2">
         <div className="card">
@@ -92,7 +152,7 @@ export default function CustomerProfile() {
             lng={form.longitude ? Number(form.longitude) : null}
             onChange={(la, ln) => setForm((f) => ({ ...f, latitude: String(la), longitude: String(ln) }))}
  />
-          {!form.latitude && <p className="muted">⚠ Location confirm karna zaroori hai — "Confirm Location" dabayein ya map par pin drop karein.</p>}
+          {!form.latitude && <p className="muted">⚠ Confirming the location is required — press "Confirm Location" or drop a pin on the map.</p>}
           <button className="btn" disabled={!form.area?.trim() || !form.full_address?.trim() || !form.latitude} onClick={addAddress}>Add Address</button>
         </div>
       </div>

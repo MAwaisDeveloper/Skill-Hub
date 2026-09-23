@@ -20,11 +20,11 @@ export default function ModuleDataPage() {
   const cols = data?.rows?.length ? Object.keys(data.rows[0]) : [];
 
   return (
-    <Layout title={`Data — ${table}`} subtitle={data ? (data.scope === 'all' ? 'All records (admin view)' : 'Aap ke apne records') : ''}>
+    <Layout title={`Data — ${table}`} subtitle={data ? (data.scope === 'all' ? 'All records (admin view)' : 'Your own records') : ''}>
       {error && <div className="alert error">{error}</div>}
       <div className="card">
         {!data && !error && <Empty>Loading…</Empty>}
-        {data && data.rows.length === 0 && <Empty icon="🗃">Is table mein aap ka koi record nahi.</Empty>}
+        {data && data.rows.length === 0 && <Empty icon="🗃">You have no records in this table.</Empty>}
         {data && data.rows.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
             <table>

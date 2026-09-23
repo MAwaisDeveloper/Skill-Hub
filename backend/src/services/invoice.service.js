@@ -116,4 +116,69 @@ async function payoutInvoice(userId, payoutId) {
   };
 }
 
-module.exports = { topupInvoice, bookingInvoice, payoutInvoice, invNumber };
+async function withdrawalInvoice(userId, withdrawalId) {
+  const [rows] = await pool.query(
+    `SELECT w.*, COALESCE(sp.full_name, c.full_name) AS full_name
+     FROM withdrawals w
+     JOIN users u ON u.id = w.user_id
+     LEFT JOIN service_professionals sp ON sp.user_id = w.user_id
+     LEFT JOIN customers c ON c.user_id = w.user_id
+     WHERE w.id = ?`,
+    [withdrawalId]
+  );
+  const w = rows[0];
+  if (!w) throw new HttpError(404, 'Withdrawal not found');
+  const [roleRows] = await pool.query(`SELECT role FROM users WHERE id = ?`, [userId]);
+  if (w.user_id !== userId && roleRows[0]?.role !== 'admin') throw new HttpError(403, 'Not your invoice');
+
+  return {
+    invoice_number: invNumber('W', w.id),
+    type: 'Wallet Withdrawal',
+    date: w.processed_at || w.created_at,
+    from: `${w.full_name} (Hunar Wallet)`,
+    to: `${w.account_title || w.full_name} (${w.provider === 'easypaisa' ? 'Easypaisa' : 'JazzCash'} ${w.account_number})`,
+    method: w.provider === 'easypaisa' ? 'Easypaisa' : 'JazzCash',
+    reference: `WDR-${String(w.id).padStart(6, '0')}`,
+    status: w.status,
+    items: [{ description: `Withdrawal to ${w.provider} account`, amount: Number(w.amount) }],
+    subtotal: Number(w.amount),
+    fees: 0,
+    total: Number(w.amount),
+    admin_note: w.admin_note || null,
+  };
+}
+
+async function penaltyInvoice(userId, penaltyId) {
+  const [rows] = await pool.query(
+    `SELECT pen.*, sp.full_name, b.booking_code, c.name AS category_name
+     FROM professional_penalties pen
+     JOIN service_professionals sp ON sp.id = pen.professional_id
+     LEFT JOIN bookings b ON b.id = pen.booking_id
+     LEFT JOIN categories c ON c.id = b.category_id
+     WHERE pen.id = ?`,
+    [penaltyId]
+  );
+  const pen = rows[0];
+  if (!pen) throw new HttpError(404, 'Penalty not found');
+  const [own] = await pool.query(`SELECT user_id FROM service_professionals WHERE id = ?`, [pen.professional_id]);
+  const [roleRows] = await pool.query(`SELECT role FROM users WHERE id = ?`, [userId]);
+  if (own[0].user_id !== userId && roleRows[0]?.role !== 'admin') throw new HttpError(403, 'Not your invoice');
+
+  return {
+    invoice_number: invNumber('PEN', pen.id),
+    type: 'Cancellation Penalty',
+    date: pen.created_at,
+    from: pen.full_name,
+    to: 'Hunar Platform / Customer compensation',
+    method: 'Auto-deducted from future payouts',
+    reference: pen.booking_code || `PEN-${String(pen.id).padStart(6, '0')}`,
+    status: pen.settled ? 'settled' : 'owed',
+    items: [{ description: pen.reason || `Penalty — ${pen.category_name || 'job'} cancellation`, amount: Number(pen.amount) }],
+    subtotal: Number(pen.amount),
+    fees: 0,
+    total: Number(pen.amount),
+    settled: !!pen.settled,
+  };
+}
+
+module.exports = { topupInvoice, bookingInvoice, payoutInvoice, withdrawalInvoice, penaltyInvoice, invNumber };

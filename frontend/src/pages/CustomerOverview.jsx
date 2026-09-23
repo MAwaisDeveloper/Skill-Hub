@@ -36,6 +36,36 @@ export default function CustomerOverview() {
         <div className="card stat"><span className="value">{bookings.length}</span><span className="label">Total Bookings</span><span className="hint">all time</span></div>
       </div>
 
+      {/* Offers / late-arrival actions — deal yahin finalize hota hai */}
+      {bookings.filter((b) => b.offer_status === 'pending' && b.status === 'waiting_for_professional').length > 0 && (
+        <div className="card" style={{ borderLeft: '4px solid var(--gold)' }}>
+          <h2>💼 Pending Offers — Deal Finalize Karein</h2>
+          <p className="muted">Professionals ne aap ki request par apni price offer ki hai:</p>
+          {bookings.filter((b) => b.offer_status === 'pending').map((b) => (
+            <div className="row spread mb" key={b.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <b>{b.professional_name}</b> — {b.category_name} · offer <b>Rs {Number(b.offered_price).toLocaleString()}</b>
+                {Number(b.offered_price) !== Number(b.final_price) && <span className="muted"> (aap ki budget: {fmt(b.final_price)})</span>}
+                <div className="muted" style={{ fontSize: 13 }}>{b.description?.slice(0, 90)}</div>
+              </div>
+              <Link to={`/bookings/${b.id}`} className="btn small">Accept / Reject →</Link>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {bookings.filter((b) => b.late_notified === 1 && b.late_approved === 0 && ['accepted', 'on_the_way'].includes(b.status)).length > 0 && (
+        <div className="card" style={{ borderLeft: '4px solid var(--danger)' }}>
+          <h2>⏰ Late Arrivals — Action Required</h2>
+          {bookings.filter((b) => b.late_notified === 1 && b.late_approved === 0).map((b) => (
+            <div className="row spread mb" key={b.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+              <div><b>{b.professional_name}</b> is running late on {b.booking_code} — approve (no deduction) or cancel (100% refund)</div>
+              <Link to={`/bookings/${b.id}`} className="btn small danger">Handle →</Link>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="card">
         <div className="row spread mb">
           <h2>Recent Bookings</h2>

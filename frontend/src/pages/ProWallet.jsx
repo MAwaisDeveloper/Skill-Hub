@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatementView, DirBadge, Amt, Empty } from '../components/ui';
+import { StatementView, DirBadge, Amt, Empty, InvoiceModal } from '../components/ui';
 
 export default function ProWallet() {
   const { session } = useApp();
@@ -14,6 +14,7 @@ export default function ProWallet() {
   const [title, setTitle] = useState(null);
   const [withdrawals, setWithdrawals] = useState([]);
   const [penalties, setPenalties] = useState([]);
+  const [invoice, setInvoice] = useState(null); // { kind, id }
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
@@ -43,7 +44,7 @@ export default function ProWallet() {
     setError(''); setMsg('');
     try {
       const res = await api.post('/professional/wallet/withdraw', { amount: Number(amount), ...wd }, token);
-      setMsg(`Withdrawal requested: Rs ${Number(amount).toLocaleString()} → ${res.to}. Pending list mein show hoga.`);
+      setMsg(`Withdrawal requested: Rs ${Number(amount).toLocaleString()} → ${res.to}. It will appear in the pending list.`);
       setAmount('');
       await load();
     } catch (e) { setError(e.message); }
@@ -61,19 +62,19 @@ export default function ProWallet() {
   };
 
   return (
-    <Layout title="Wallet & Earnings" subtitle="Incoming / Outgoing / Pending — commission, penalties, withdrawals sab clear">
+    <Layout title="Wallet & Earnings" subtitle="Incoming / outgoing / pending — commission, penalties and withdrawals, all in the clear">
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
       <div className="grid cols-3">
         <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Available Balance</span></div>
         <div className="card stat"><span className="value">{fmt(profile?.payout_account || '—')}</span><span className="label">Payout Account</span><span className="hint">{profile?.payout_provider || 'set in profile'}</span></div>
-        <div className="card stat"><span className="value" style={{ color: Number(wallet?.held_amount) > 0 ? 'inherit' : 'inherit' }}>{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">aap ki bookings par hold (info)</span></div>
+        <div className="card stat"><span className="value">{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">locked against your bookings (info)</span></div>
       </div>
 
       <div className="card">
-        <h2>💸 Wallet se paisay nikalain (Withdraw)</h2>
-        <p className="muted mb">Provider + number → account title verify (jis naam par number hai wo show hota hai, warna Not Found) → request → admin transfer.</p>
+        <h2>💸 Withdraw from Wallet</h2>
+        <p className="muted mb">Provider + number → verify the account title (shows the registered name, or Not Found) → request → admin transfers.</p>
         <div className="row">
           <select style={{ maxWidth: 150 }} value={wd.provider} onChange={(e) => { setWd({ ...wd, provider: e.target.value }); setTitle(null); }}>
             <option value="jazzcash">JazzCash</option>
@@ -88,17 +89,17 @@ export default function ProWallet() {
         {title && (
           title.found
             ? <div className="alert success">✅ Account title: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
-            : <div className="alert error">❌ <b>Not Found</b> — is number par koi registered account nahi mila. Number check karein.</div>
+            : <div className="alert error">❌ <b>Not Found</b> — no registered account on this number. Please check the number.</div>
         )}
       </div>
 
       <div className="grid cols-2">
         <div className="card">
-          <h2>Pending Withdrawals</h2>
+          <h2>Withdrawal History</h2>
           {withdrawals.length === 0 && <Empty>No withdrawals yet.</Empty>}
           {withdrawals.length > 0 && (
             <table>
-              <thead><tr><th>Date</th><th>To</th><th>Amount</th><th>Status</th><th>Admin Note</th></tr></thead>
+              <thead><tr><th>Date</th><th>To</th><th>Amount</th><th>Status</th><th>Admin Note</th><th></th></tr></thead>
               <tbody>
                 {withdrawals.map((w) => (
                   <tr key={w.id}>
@@ -107,6 +108,7 @@ export default function ProWallet() {
                     <td><Amt value={w.amount} dir="out" /></td>
                     <td><DirBadge dir={w.status === 'pending' ? 'pending' : w.status === 'completed' ? 'in' : 'out'} label={w.status} /></td>
                     <td className="muted">{w.admin_note || '—'}</td>
+                    <td><button className="btn small secondary" title="Invoice" onClick={() => setInvoice({ kind: 'withdrawal', id: w.id })}>🧾</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -116,11 +118,11 @@ export default function ProWallet() {
 
         <div className="card">
           <h2>Penalties (owed / settled)</h2>
-          <p className="muted mb">Customer-cancel nahi — <b>aap ke apna cancel</b> par 10% penalty record hoti hai jo agli payout se auto-cut hoti hai.</p>
+          <p className="muted mb">Not customer cancellations — a penalty is recorded when <b>you cancel</b> an accepted job (10%). It is auto-deducted from your next payout.</p>
           {penalties.length === 0 && <Empty icon="🛡️">No penalties — clean record!</Empty>}
           {penalties.length > 0 && (
             <table>
-              <thead><tr><th>Date</th><th>Booking</th><th>Reason</th><th>Amount</th><th>Status</th></tr></thead>
+              <thead><tr><th>Date</th><th>Booking</th><th>Reason</th><th>Amount</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {penalties.map((p) => (
                   <tr key={p.id}>
@@ -128,7 +130,8 @@ export default function ProWallet() {
                     <td className="muted">{p.booking_code || '—'}</td>
                     <td className="muted">{p.reason}</td>
                     <td><Amt value={p.amount} dir="out" /></td>
-                    <td><DirBadge dir={p.settled ? 'in' : 'pending'} label={p.settled ? 'settled' : 'owed — next payout se cut'} /></td>
+                    <td><DirBadge dir={p.settled ? 'in' : 'pending'} label={p.settled ? 'settled' : 'owed — cut from next payout'} /></td>
+                    <td><button className="btn small secondary" title="Invoice" onClick={() => setInvoice({ kind: 'penalty', id: p.id })}>🧾</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -139,9 +142,11 @@ export default function ProWallet() {
 
       <StatementView
         fetcher={fetchStatement}
-        title="Complete Statement — Incoming / Outgoing"
-        subtitle="Payout kis customer ki booking se aya, commission kitna kata, penalty kab lagi — sab counterparty naam ke sath."
+        title="Earnings History"
+        subtitle="Which customer's booking each payout came from, commission deducted, penalties charged — every entry with the counterparty name. Latest week loads by default."
       />
+
+      {invoice && <InvoiceModal kind={invoice.kind} id={invoice.id} onClose={() => setInvoice(null)} />}
     </Layout>
   );
 }

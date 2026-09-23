@@ -30,7 +30,7 @@ export default function SettingsPage() {
   const changePassword = async () => {
     setError(''); setMsg('');
     try {
-      if (pwd.new_password !== pwd.confirm) throw new Error('Confirm password match nahi kar raha');
+      if (pwd.new_password !== pwd.confirm) throw new Error('Confirm password does not match');
       await api.post('/auth/change-password', { current_password: pwd.current_password, new_password: pwd.new_password }, token);
       setMsg('Password saved ✓ — ab phone + password se bhi login ho sakta hai');
       setPwd({ current_password: '', new_password: '', confirm: '' });
@@ -39,7 +39,7 @@ export default function SettingsPage() {
 
   const p = me?.profile;
   return (
-    <Layout title="Settings & Profile" subtitle="Aap ki personal details, work info aur password">
+    <Layout title="Settings & Profile" subtitle="Your personal details, work info and password">
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
@@ -73,21 +73,21 @@ export default function SettingsPage() {
               <span className="k">Payout</span><span>{p?.payout_account || '—'} ({p?.payout_provider || '—'})</span>
               <span className="k">Documents</span><span>{p?.cnic_front_photo ? 'Uploaded ✓' : 'Pending ✗'}</span>
             </div>
-            <p className="muted mt">Work details edit karne ke liye <b>Profile & Verification</b> page use karein.</p>
+            <p className="muted mt">To edit work details, use the <b>Profile & Verification</b> page.</p>
           </div>
         )}
 
         {role === 'customer' && (
           <div className="card">
             <h2>📍 Saved Addresses</h2>
-            <p className="muted">Profile & Addresses page se manage karein (map pin ke sath).</p>
+            <p className="muted">Manage from the Profile & Addresses page (with map pins).</p>
           </div>
         )}
 
         <div className="card">
           <h2>🔒 Password</h2>
           {me?.password_hash !== undefined && !me?.password_hash && (
-            <div className="alert info">Abhi aap sirf OTP se login karte hain — password set karne se phone+password login bhi chalega.</div>
+            <div className="alert info">You currently log in with OTP only — setting a password also enables phone + password login.</div>
           )}
           <label>Current Password (agar set hai)</label>
           <input type="password" value={pwd.current_password} onChange={(e) => setPwd({ ...pwd, current_password: e.target.value })} />

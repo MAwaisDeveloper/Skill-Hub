@@ -4,6 +4,19 @@ const { getSettings, notify: notifyHelper } = require('../utils/helpers');
 
 // ---------- Core ledger helpers ----------
 
+// Platform revenue: admin user ke wallet mein commission credit (real money flow)
+// Har booking release + contract milestone release dono se call hota hai.
+async function creditPlatformRevenue(conn, amount, note) {
+  if (!(amount > 0)) return null;
+  const [admins] = await conn.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
+  if (!admins.length) return null;
+  const wallet = await getWalletForUpdate(conn, admins[0].id);
+  await conn.query(`UPDATE wallets SET balance = balance + ? WHERE id = ?`, [amount, wallet.id]);
+  const [after] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [wallet.id]);
+  await addLedger(conn, wallet.id, 'commission', amount, null, note, after[0].balance);
+  return after[0].balance;
+}
+
 async function getWalletForUpdate(conn, userId) {
   const [rows] = await conn.query(`SELECT * FROM wallets WHERE user_id = ? FOR UPDATE`, [userId]);
   if (rows.length) return rows[0];
@@ -115,7 +128,7 @@ async function completeTopup({ reference, success = true }) {
       `INSERT INTO payments (user_id, amount, payment_method, transaction_ref, status) VALUES (?, ?, ?, ?, 'success')`,
       [topup.user_id, topup.amount, topup.provider, reference]
     );
-    await notify(topup.user_id, 'wallet', `Wallet top-up successful: Rs ${topup.amount} via ${topup.provider}`);
+    await notifyHelper(topup.user_id, 'wallet', `Wallet top-up successful: Rs ${topup.amount} via ${topup.provider}`);
     return { status: 'success', balance: after[0].balance, amount: topup.amount };
   });
 }
@@ -162,12 +175,13 @@ async function releaseForBooking(conn, bookingId, trigger = 'customer_confirm') 
   const commissionAmount = Math.round(amount * (commissionPercent / 100) * 100) / 100;
   const proAmount = amount - commissionAmount;
 
-  // 1) Commission record
+  // 1) Commission record + platform revenue wallet credit (real money flow)
   await conn.query(`INSERT INTO commissions (booking_id, amount, percentage) VALUES (?, ?, ?)`, [
     bookingId,
     commissionAmount,
     commissionPercent,
   ]);
+  await creditPlatformRevenue(conn, commissionAmount, `Booking #${bookingId} commission (${commissionPercent}%)`);
 
   // 2) Release from customer hold -> platform ledger effect: money leaves customer wallet
   const [custRows] = await conn.query(
@@ -279,7 +293,15 @@ async function getStatement(userId, opts = {}) {
 
   const [rows] = await pool.query(
     `SELECT t.*,
-            b.booking_code, c.name AS category_name,
+            b.booking_code, b.id AS booking_id, c.name AS category_name,
+            (SELECT wt.gateway_transaction_ref FROM wallet_topups wt
+              WHERE wt.user_id = ? AND wt.status IN ('success', 'completed')
+                AND t.note LIKE CONCAT('%', wt.gateway_transaction_ref, '%')
+              LIMIT 1) AS topup_ref,
+            (SELECT pp.id FROM professional_penalties pp
+              JOIN service_professionals sp2 ON sp2.id = pp.professional_id
+              WHERE sp2.user_id = ? AND pp.booking_id = t.related_booking_id
+              LIMIT 1) AS penalty_id,
             CASE
               WHEN t.type IN ('hold','refund','release') THEN COALESCE(sp.full_name, cu.full_name)
               WHEN t.type = 'payout' THEN cu.full_name
@@ -296,7 +318,7 @@ async function getStatement(userId, opts = {}) {
      ${baseSql}
      ORDER BY t.id DESC
      LIMIT ? OFFSET ?`,
-    [...params, perPage, (page - 1) * perPage]
+    [userId, userId, ...params, perPage, (page - 1) * perPage]
   );
 
   const [sumRows] = await pool.query(
@@ -332,6 +354,7 @@ async function getStatement(userId, opts = {}) {
 }
 
 module.exports = {
+  creditPlatformRevenue,
   getWallet,
   getTransactions,
   getStatement,

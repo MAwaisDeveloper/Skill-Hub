@@ -63,6 +63,7 @@ export default function App() {
       <Route path="/admin/modules" element={<ModulesPage />} />
       <Route path="/admin/settings-profile" element={<SettingsPage />} />
       <Route path="/modules-data/:table" element={<ModuleDataPage />} />
+      <Route path="/wallet-data/:table" element={<ModuleDataPage />} />
       <Route path="/invoice/:type/:id" element={<InvoicePage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />

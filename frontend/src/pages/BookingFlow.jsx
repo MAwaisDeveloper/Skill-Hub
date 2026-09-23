@@ -16,9 +16,10 @@ export default function BookingFlow() {
   const [pro, setPro] = useState(null);
   const [slots, setSlots] = useState([]);
   const [addresses, setAddresses] = useState([]);
-  const [form, setForm] = useState({ category_id: '', area: '', date: '', slot_time: '', address_id: '', description: '', final_price: '' });
+  const [form, setForm] = useState({ category_id: '', area: '', date: '', slot_time: '', address_id: '', description: '', final_price: '', is_urgent: false });
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null);
+  const [fallbackUsed, setFallbackUsed] = useState(false);
 
   useEffect(() => {
     api.get('/customer/categories').then(setCategories).catch(() => {});
@@ -31,8 +32,15 @@ export default function BookingFlow() {
       const params = new URLSearchParams();
       if (form.category_id) params.set('category_id', form.category_id);
       if (form.area) params.set('area', form.area);
+      if (form.is_urgent) params.set('urgent', '1');
       if (form.date && form.slot_time) { params.set('date', form.date); params.set('slot_time', form.slot_time + ':00'); }
-      const results = await api.get(`/customer/professionals/search?${params}`, token);
+      let results = await api.get(`/customer/professionals/search?${params}`, token);
+      setFallbackUsed(false);
+      if (!results.length) {
+        // Fallback: is area mein koi nahi to saare verified pros (same category pehle) dikhao
+        results = await api.get(`/customer/professionals/search?${form.category_id ? `category_id=${form.category_id}` : ''}`, token);
+        setFallbackUsed(true);
+      }
       setPros(results);
       setStep(2);
     } catch (e) {
@@ -98,24 +106,38 @@ export default function BookingFlow() {
             <option value="">Any</option>
             {['09', '11', '13', '15'].map((h) => <option key={h} value={h}>{h}:00</option>)}
           </select>
-          <button className="btn" onClick={search}>Search Professionals</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
+            <input type="checkbox" checked={form.is_urgent} onChange={(e) => setForm({ ...form, is_urgent: e.target.checked })} style={{ width: 'auto', margin: 0 }} />
+            ⚡ Urgent / ASAP — sirf abhi available professionals dikhao
+          </label>
+          <label>Job details (this is what the professional sees — what needs to be done, number of rooms/units, etc.)</label>
+          <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="e.g. Fix wiring in 2 rooms and install 3 fans; I already have the material" />
+          <label>Your budget expectation (optional — the professional can send an offer)</label>
+          <input type="number" value={form.final_price} onChange={(e) => setForm({ ...form, final_price: e.target.value })} placeholder="e.g. 3000" style={{ maxWidth: 220 }} />
+          <button className="btn" onClick={search}>🔍 Search Professionals</button>
         </div>
       )}
 
       {step === 2 && (
         <div className="card">
           <h2>2. Choose a Professional</h2>
-          {pros.length === 0 && <p className="muted">No professionals found — try another area/category.</p>}
+          {fallbackUsed && (
+            <div className="alert warn">No professional is currently available in this area — check these <b>verified professionals</b> (in your category), or change the area and search again.</div>
+          )}
+          {!pros.length && <p className="muted">No verified professional found — try again without the category filter.</p>}
           <div className="grid cols-2">
             {pros.map((p) => (
               <div className="card" key={p.id}>
                 <div className="row spread">
-                  <h3>{p.full_name} <span className="badge verified">Verified</span></h3>
+                  <h3>{p.full_name} <span className="badge verified">✓ Verified</span></h3>
                   <span className="muted">★ {p.average_rating} · {p.completed_jobs} jobs</span>
                 </div>
                 <p className="muted">{p.bio}</p>
-                <p className="muted">Areas: {p.areas} · {p.experience_years}y exp</p>
-                <button className="btn small" onClick={() => openPro(p)}>Select</button>
+                <p className="muted">Areas: {p.areas || 'Lahore'} · {p.experience_years}y exp</p>
+                {p.available_now === 1 && <span className="badge status">⚡ Available Now</span>}
+                <div className="row mt">
+                  <button className="btn small" onClick={() => openPro(p)}>Select & Continue →</button>
+                </div>
               </div>
             ))}
           </div>
@@ -125,7 +147,15 @@ export default function BookingFlow() {
       {step === 3 && pro && (
         <div className="card">
           <h2>3. Confirm Details — {pro.full_name}</h2>
-          <p className="muted mb">📍 Service location map (address pin se confirm karein):</p>
+          {addresses.length === 0 && (
+            <div className="alert warn">
+              📍 You have no saved address yet — go to <a href="/customer/profile">Profile & Addresses</a> and add one (with a map pin), then book from there.
+            </div>
+          )}
+          {addresses.length > 0 && !form.address_id && (
+            <div className="alert info">📍 Select your service address — the map pin preview appears below.</div>
+          )}
+          <p className="muted mb">📍 Service location map (confirmed from the address pin):</p>
           <MapPicker
             lat={addresses.find((a) => String(a.id) === String(form.address_id))?.latitude ?? null}
             lng={addresses.find((a) => String(a.id) === String(form.address_id))?.longitude ?? null}
@@ -152,7 +182,7 @@ export default function BookingFlow() {
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
           <label>Final Price (Rs) — locked at booking time</label>
           <input type="number" value={form.final_price} onChange={(e) => setForm({ ...form, final_price: e.target.value })} />
-          <button className="btn" onClick={create} disabled={!form.date || !form.final_price}>Create Booking</button>
+          <button className="btn" onClick={create} disabled={!form.date || !form.final_price || !form.address_id}>Create Booking</button>
         </div>
       )}
 
@@ -160,13 +190,19 @@ export default function BookingFlow() {
         <div className="card">
           <h2>4. Secure the Payment</h2>
           <div className="alert warn">
-            Wallet balance: <b>{fmt(created.wallet_balance)}</b> — required: <b>{fmt(created.wallet_sufficient ? 'sufficient' : 'more funds needed')}</b>
+            Wallet balance: <b>{fmt(created.wallet_balance)}</b> — required: <b>{fmt(Number(created.final_price || form.final_price) || 0)}</b>
           </div>
+          {!created.wallet_sufficient && (
+            <div className="alert error">
+              ⚠ Wallet balance is not enough! Add money first —
+              <a href="/customer/wallet" className="btn small" style={{ marginLeft: 10 }}>👛 Add money to wallet (JazzCash/Easypaisa)</a>
+            </div>
+          )}
           <p>
             On <b>Pay Now</b>, the full amount moves from your wallet balance to <b>escrow (held)</b>. The professional
             can't receive it until you confirm the job is complete (or 24h auto-release).
           </p>
-          <button className="btn" onClick={pay}>Pay Now (Escrow Hold)</button>
+          <button className="btn" onClick={pay} disabled={!created.wallet_sufficient} title={created.wallet_sufficient ? '' : 'Add money to your wallet first'}>Pay Now (Escrow Hold)</button>
         </div>
       )}
     </Layout>

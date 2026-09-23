@@ -68,7 +68,7 @@ export default function Login() {
     setError(''); setMsg('');
     try {
       const res = await api.post('/auth/reset', { phone, otp, new_password: form.password });
-      setMsg(res.message + ' — ab login karein.');
+      setMsg(res.message + ' — you can sign in now.');
       setTab('password'); setStep(1); setDevOtp(null);
     } catch (e) { setError(e.message); }
   };
@@ -94,10 +94,10 @@ export default function Login() {
             <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="••••••••" onKeyDown={(e) => e.key === 'Enter' && passwordLogin()} />
             <button className="btn" onClick={passwordLogin}>Login</button>
             <p className="muted mt">
-              Password yaad nahi? <a href="#" onClick={(e) => { e.preventDefault(); setTab('forgot'); setStep(1); setMsg(''); }}>Forgot password</a>
-              {' · '}Naye hain? <Link to="/register">Register karein</Link>
+              Forgot your password? <a href="#" onClick={(e) => { e.preventDefault(); setTab('forgot'); setStep(1); setMsg(''); }}>Reset it</a>
+              {' · '}New here? <Link to="/register">Create an account</Link>
             </p>
-            <p className="muted">Pehli baar? Demo: OTP tab se phone <b>03001234567</b> (customer) try karein.</p>
+            <p className="muted">First time? Demo: use the OTP tab with phone <b>03001234567</b> (customer).</p>
           </>
         )}
 
@@ -114,7 +114,7 @@ export default function Login() {
                 <button className="btn" onClick={verifyOtp}>Verify & Login</button>
               </>
             )}
-            <p className="muted mt">Password login bhi available hai — upar tab switch karein. <Link to="/register">Register</Link></p>
+            <p className="muted mt">Password login is also available — switch tabs above. <Link to="/register">Register</Link></p>
           </>
         )}
 
@@ -135,7 +135,7 @@ export default function Login() {
             {step === 1 && (
               <>
                 <label>Registered Email ya Phone</label>
-                <input value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} placeholder="jisse OTP jayega" />
+                <input value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} placeholder="phone that will receive the OTP" />
                 <button className="btn" onClick={forgot}>Send Reset OTP</button>
               </>
             )}

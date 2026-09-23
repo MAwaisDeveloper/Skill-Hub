@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { Empty } from '../components/ui';
+import { Empty, StatusBadge } from '../components/ui';
 
 export default function ProContracts() {
   const { session } = useApp();
@@ -12,13 +12,16 @@ export default function ProContracts() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
+  const [showAll, setShowAll] = useState(false);
+
   const load = async () => {
     try {
-      setContracts(await api.get('/professional/contracts', token));
+      setContracts(await api.get(`/professional/contracts${showAll ? '?all=1' : ''}`, token));
     } catch (e) {
       setError(e.message);
     }
   };
+  useEffect(() => { load(); }, [showAll]);
   useEffect(() => { load(); }, []);
 
   const submitBid = async (contractId) => {
@@ -33,6 +36,15 @@ export default function ProContracts() {
     }
   };
 
+  const [msMap, setMsMap] = useState({});
+  const openMilestones = async (contractId) => {
+    setError('');
+    try {
+      const rows = await api.get(`/professional/contracts/${contractId}/milestones`, token);
+      setMsMap({ ...msMap, [contractId]: rows });
+    } catch (e) { setError(e.message); }
+  };
+
   return (
     <Layout title="Contract Marketplace" subtitle="Bulk hiring requests matching your categories — submit your quote">
       <div className="card">
@@ -42,18 +54,51 @@ export default function ProContracts() {
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
+        <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} style={{ width: 'auto', margin: 0 }} />
+        Sab categories ke open contracts bhi dikhaao (browse-only — bid sirf matching category par)
+      </label>
       {contracts.length === 0 && <div className="card"><Empty icon="📑">No open contracts right now — check back soon.</Empty></div>}
       {contracts.map((c) => (
         <div className="card" key={c.id}>
           <div className="row spread">
             <h2>{c.contract_code} — {c.category_name}</h2>
-            {c.my_bid_status && <span className="badge status">your bid: {c.my_bid_status}</span>}
+            <span>
+              {c.my_bid_status && <span className="badge status">your bid: {c.my_bid_status}</span>}
+              {c.status !== 'open' && <StatusBadge status={c.status} />}
+            </span>
           </div>
           <p>{c.description}</p>
           <p className="muted">
             Workers: {c.workers_needed} · Duration: {c.duration_days} days · Start: {c.start_date} · Budget: {fmt(c.budget_min)} – {fmt(c.budget_max)}
           </p>
-          {!c.my_bid_status && (
+          {/* Awarded contract: release progress */}
+          {c.status !== 'open' && (
+            <div className="mt" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+              {!msMap[c.id] ? (
+                <button className="btn small secondary" onClick={() => openMilestones(c.id)}>📋 Milestones / release progress</button>
+              ) : (
+                <table>
+                  <thead><tr><th>#</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {msMap[c.id].map((m) => (
+                      <tr key={m.id}>
+                        <td><b>{m.milestone_no}</b>{m.milestone_no === 1 ? ' (deposit)' : ''}</td>
+                        <td>{m.description}</td>
+                        <td>{fmt(m.amount)}</td>
+                        <td>{m.status === 'released' ? <span className="badge verified">✓ Released {m.released_at ? String(m.released_at).slice(0, 10) : ''}</span> : <StatusBadge status={m.status === 'held' ? 'waiting_for_professional' : m.status} />}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p className="muted mt" style={{ fontSize: 13 }}>Customer milestone confirm karega tabhi aap ke wallet mein payout aayegi (10% commission ke baad 90%).</p>
+            </div>
+          )}
+          {!c.my_bid_status && !c.matches_me && (
+            <div className="alert warn">This contract is outside your category — browse only.</div>
+          )}
+          {!c.my_bid_status && c.matches_me !== 0 && (
             <div className="row">
               <input style={{ maxWidth: 160 }} type="number" placeholder="Your quote (Rs)"
                 value={bidForm[c.id]?.quoted_price || ''}

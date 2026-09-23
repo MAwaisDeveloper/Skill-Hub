@@ -53,7 +53,8 @@ export default function MapPicker({ lat, lng, onChange, height = 280 }) {
     return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
   }, [ready]);
 
-  // sync external lat/lng -> marker
+  // sync external lat/lng -> marker + map ko pin par pan/zoom (geocode confirm par pin dikhe)
+  const lastExternal = useRef(null);
   useEffect(() => {
     if (!ready || !mapRef.current || lat == null || lng == null) return;
     const L = leafletRef.current;
@@ -66,6 +67,13 @@ export default function MapPicker({ lat, lng, onChange, height = 280 }) {
     } else {
       markerRef.current.setLatLng([lat, lng]);
     }
+    // external change (geocode/confirm) par map ko pin par le jao — sirf tab jab change humari drag se na aya ho
+    const key = `${lat},${lng}`;
+    if (lastExternal.current !== key) {
+      lastExternal.current = key;
+      mapRef.current.setView([lat, lng], 16, { animate: true });
+      setTimeout(() => mapRef.current && mapRef.current.invalidateSize(), 250);
+    }
   }, [lat, lng, ready]);
 
   return (
@@ -75,7 +83,7 @@ export default function MapPicker({ lat, lng, onChange, height = 280 }) {
         <div ref={divRef} style={{ height: '100%', width: '100%' }} />
       </div>
       <p className="muted">
-        Map par click kar ke exact location pin karein (drag bhi kar sakte hain). Free OpenStreetMap — no API cost.
+Click on the map to drop the exact location pin (you can drag it too). Free OpenStreetMap — no API cost.
         {lat != null && <b> Selected: {lat}, {lng}</b>}
       </p>
     </div>

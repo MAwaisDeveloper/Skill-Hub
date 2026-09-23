@@ -147,6 +147,7 @@ async function createBooking(customerUserId, payload) {
       booking_id: bookingId,
       booking_code,
       status: 'pending_payment',
+      final_price: Number(final_price),
       slot_locked: slotLocked,
       wallet_balance: balance,
       wallet_sufficient: balance >= Number(final_price),
@@ -508,7 +509,11 @@ async function custBookingContext(conn, customerUserId, bookingId) {
     [rows[0].customer_id]
   );
   if (cust[0].user_id !== customerUserId) throw new HttpError(403, 'Not your booking');
-  return { booking: rows[0], userId: customerUserId };
+  const [pro] = await conn.query(
+    `SELECT u.id AS user_id FROM service_professionals sp JOIN users u ON u.id = sp.user_id WHERE sp.id = ?`,
+    [rows[0].professional_id]
+  );
+  return { booking: rows[0], userId: customerUserId, proUserId: pro[0]?.user_id };
 }
 
 async function getProIdByUser(conn, userId) {
@@ -537,13 +542,26 @@ async function respondOffer(customerUserId, bookingId, accept) {
   return withTransaction(async (conn) => {
     const ctx = await custBookingContext(conn, customerUserId, bookingId);
     if (ctx.booking.offer_status !== 'pending') throw new HttpError(400, 'Koi pending offer nahi hai');
-    if (ctx.booking.status !== 'waiting_for_professional') throw new HttpError(400, 'Offer sirf waiting stage par respond ho sakta hai');
+    if (!['waiting_for_professional'].includes(ctx.booking.status)) throw new HttpError(400, 'Offer sirf waiting stage par respond ho sakta hai');
     if (accept) {
-      // price update ho kar deal finalize ho jati hai — customer ab pay karega (escrow)
-      await conn.query(`UPDATE bookings SET final_price = ?, offer_status = 'accepted' WHERE id = ?`, [Number(ctx.booking.offered_price), bookingId]);
-      await logBookingEvent(conn, bookingId, 'offer_accepted', ctx.userId, `Customer accepted offer Rs ${ctx.booking.offered_price}`);
-      await notify(ctx.proUserId, 'booking', `Customer ne aap ka offer accept kiya on ${ctx.booking.booking_code} — deal finalized at Rs ${ctx.booking.offered_price}`, bookingId);
-      return { offer_status: 'accepted', final_price: Number(ctx.booking.offered_price), next_step: 'POST /customer/bookings/:id/pay (escrow hold)' };
+      const oldPrice = Number(ctx.booking.final_price);
+      const newPrice = Number(ctx.booking.offered_price);
+      await conn.query(`UPDATE bookings SET final_price = ?, offer_status = 'accepted' WHERE id = ?`, [newPrice, bookingId]);
+      await logBookingEvent(conn, bookingId, 'offer_accepted', ctx.userId, `Customer accepted offer Rs ${newPrice} (was Rs ${oldPrice})`);
+      // agar pehle hi escrow hold ho chuka hai to difference auto-hold kar do (top-up ya refund dono handle)
+      let escrow_adjusted = null;
+      const diff = Math.round((newPrice - oldPrice) * 100) / 100;
+      if (Math.abs(diff) >= 0.01 && ['waiting_for_professional', 'accepted'].includes(ctx.booking.status)) {
+        if (diff > 0) {
+          await walletService.holdForBooking(conn, customerUserId, bookingId, diff);
+          escrow_adjusted = { extra_held: diff };
+        } else {
+          await walletService.refundHold(conn, customerUserId, bookingId, Math.abs(diff), 'Offer accept: price kam hui, extra escrow unlock');
+          escrow_adjusted = { refunded: Math.abs(diff) };
+        }
+      }
+      await notify(ctx.proUserId, 'booking', `Customer ne aap ka offer accept kiya on ${ctx.booking.booking_code} — deal finalized at Rs ${newPrice}`, bookingId);
+      return { offer_status: 'accepted', final_price: newPrice, escrow_adjusted, next_step: escrow_adjusted ? 'Deal live — escrow updated' : 'POST /customer/bookings/:id/pay (escrow hold)' };
     }
     await conn.query(`UPDATE bookings SET offer_status = 'rejected' WHERE id = ?`, [bookingId]);
     await logBookingEvent(conn, bookingId, 'offer_rejected', ctx.userId, 'Customer rejected the offer');

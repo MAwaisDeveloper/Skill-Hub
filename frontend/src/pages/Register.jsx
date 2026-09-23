@@ -89,7 +89,7 @@ export default function Register() {
             <input value={form.phone} onChange={set('phone')} placeholder="03XXXXXXXXX" />
             <label>Email (optional — password login ke liye useful)</label>
             <input value={form.email} onChange={set('email')} placeholder="you@example.com" />
-            <label>Password (min 8 — email/phone + password se login hoga)</label>
+            <label>Password (min 8 — login with email/phone + password)</label>
             <input type="password" value={form.password} onChange={set('password')} placeholder="••••••••" />
             <button className="btn" onClick={register}>Register</button>
           </>

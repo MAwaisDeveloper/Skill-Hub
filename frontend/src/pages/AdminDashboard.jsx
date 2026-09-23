@@ -85,6 +85,10 @@ export default function AdminDashboard() {
       setUsers(await api.get('/admin/users', token));
       setSettings(await api.get('/admin/settings', token));
       setWithdrawals(await api.get('/admin/withdrawals', token));
+      api.get('/admin/wallets', token).then((d) => {
+        const p = (d.rows || []).find((r) => r.role === 'admin');
+        if (p) setStats((s) => ({ ...s, platform_balance: p.balance }));
+      }).catch(() => {});
     } catch (e) { setError(e.message); }
   };
   useEffect(() => { load(); }, [tab]);
@@ -120,18 +124,29 @@ export default function AdminDashboard() {
   const dirOf = (type) => (['topup', 'refund', 'payout'].includes(type) ? 'in' : 'out');
 
   return (
-    <Layout title="Admin Panel" subtitle="Sab kuch — filters + pagination ke sath. Users ko sirf apna data, admin ko poora system."
-      actions={
-        <select value={tab} onChange={(e) => setTab(e.target.value)} style={{ minWidth: 170 }}>
-          {TABS.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-      }
-    >
+    <Layout title="Admin Panel" subtitle="Everything, with filters + pagination. Users see only their own data — admin sees the whole system.">
+      <div className="filters" style={{ marginBottom: 14 }}>
+        {TABS.map((t) => (
+          <button key={t} className={`btn small ${tab === t ? '' : 'secondary'}`} onClick={() => setTab(t)}>{t}</button>
+        ))}
+      </div>
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
       {tab === 'overview' && stats && (
         <>
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 34 }}>🏦</div>
+              <div style={{ flex: 1 }}>
+                <div className="muted">Platform Commission Wallet (Hunar revenue)</div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--green-deep)' }}>{fmt(stats.platform_balance ?? 0)}</div>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 13 }} className="muted">
+                <div>Bookings commission + cancellation platform share + contract milestone commission<br />Sab releases par automatic credit hoti hai</div>
+              </div>
+            </div>
+          </div>
           <div className="grid cols-4">
             <div className="card stat"><span className="value">{stats.pending_verifications}</span><span className="label">Pending Verifications</span></div>
             <div className="card stat"><span className="value">{stats.active_bookings}</span><span className="label">Active Bookings</span></div>
@@ -417,7 +432,7 @@ export default function AdminDashboard() {
       {tab === 'payouts' && (
         <>
           <div className="card">
-            <h2>Withdrawal Requests (JazzCash/Easypaisa) — approve transfer</h2>
+            <h2>Withdrawal Requests (JazzCash/Easypaisa) — approve transfers</h2>
             {withdrawals.length === 0 && <p className="muted">No withdrawal requests.</p>}
             {withdrawals.length > 0 && (
               <table>
@@ -452,7 +467,7 @@ export default function AdminDashboard() {
       {tab === 'users' && (
         <>
           <div className="card">
-            <h2>All Users — role filter + search (admin ko sab, role badge ke sath)</h2>
+            <h2>All Users — role filter + search (full directory with role badges)</h2>
             <div className="filters">
               <select value={userFilters.role} onChange={(e) => setUserFilters({ ...userFilters, role: e.target.value })}>
                 <option value="">All Roles</option>

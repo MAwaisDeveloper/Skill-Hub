@@ -15,4 +15,12 @@ router.get('/payout/:id', authenticate, requireRole('professional', 'admin'), as
   res.json(await invoiceService.payoutInvoice(req.user.id, Number(req.params.id)));
 }));
 
+router.get('/withdrawal/:id', authenticate, asyncHandler(async (req, res) => {
+  res.json(await invoiceService.withdrawalInvoice(req.user.id, Number(req.params.id)));
+}));
+
+router.get('/penalty/:id', authenticate, requireRole('professional', 'admin'), asyncHandler(async (req, res) => {
+  res.json(await invoiceService.penaltyInvoice(req.user.id, Number(req.params.id)));
+}));
+
 module.exports = router;

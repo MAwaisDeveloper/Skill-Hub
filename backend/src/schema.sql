@@ -194,10 +194,10 @@ CREATE TABLE IF NOT EXISTS payments (
   INDEX idx_pay_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 13. commissions: platform 10% per confirmed deal
+-- 13. commissions: platform 10% per confirmed deal (booking_id NULL = contract milestone commission)
 CREATE TABLE IF NOT EXISTS commissions (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  booking_id BIGINT UNSIGNED NOT NULL,
+  booking_id BIGINT UNSIGNED NULL,
   amount DECIMAL(12,2) NOT NULL,
   percentage DECIMAL(5,2) NOT NULL DEFAULT 10.00,
   calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

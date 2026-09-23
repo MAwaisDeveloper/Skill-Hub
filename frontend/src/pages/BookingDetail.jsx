@@ -4,6 +4,7 @@ import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
 import { StatusBadge, CancelPreviewModal } from '../components/ui';
+import LiveMap from '../components/LiveMap';
 
 export default function BookingDetail() {
   const { id } = useParams();
@@ -80,6 +81,39 @@ export default function BookingDetail() {
         </div>
 
         <div>
+          {/* Offer from professional — accept = deal finalize */}
+          {s === 'waiting_for_professional' && booking.offer_status === 'pending' && (
+            <div className="card" style={{ borderLeft: '4px solid var(--gold)' }}>
+              <h2>💼 Professional ka Offer</h2>
+              <p style={{ fontSize: 18 }}><b>{booking.professional_name}</b> ne kaam ke liye <b>Rs {Number(booking.offered_price).toLocaleString()}</b> bola hai</p>
+              {booking.offer_message && <div className="alert info">"{booking.offer_message}"</div>}
+              {booking.arrival_minutes && <p className="muted">ETA: {booking.arrival_minutes} min</p>}
+              <div className="row">
+                <button className="btn" onClick={() => act(() => api.post(`/customer/bookings/${id}/offer/respond`, { accept: true }, token))}>✓ Accept Offer (Deal)</button>
+                <button className="btn danger" onClick={() => act(() => api.post(`/customer/bookings/${id}/offer/respond`, { accept: false }, token))}>✗ Reject</button>
+              </div>
+              {Number(booking.offered_price) !== Number(booking.final_price) && (
+                <p className="muted mt">On accept, the price updates from {fmt(booking.final_price)} → {fmt(booking.offered_price)}, then the escrow hold is placed.</p>
+              )}
+            </div>
+          )}
+
+          {/* Late arrival request — approve to kisi ke paise nahi katte */}
+          {['accepted', 'on_the_way'].includes(s) && booking.late_notified === 1 && booking.late_approved === 0 && (
+            <div className="card" style={{ borderLeft: '4px solid var(--danger)' }}>
+              <h2>⏰ Professional Late Hai</h2>
+              <p>The professional has informed you they will arrive late. Approve or cancel:</p>
+              <ul style={{ paddingLeft: 18 }}>
+                <li><b>Approve:</b> the job continues as planned — <b>nobody's money is deducted</b> (only the normal 10% commission applies at release)</li>
+                <li><b>Cancel:</b> you receive a <b>100% refund</b>, and a 10% penalty is recorded against the professional</li>
+              </ul>
+              <div className="row">
+                <button className="btn" onClick={() => act(() => api.post(`/customer/bookings/${id}/late-approve`, {}, token))}>✓ Theek Hai, Aa Jayen</button>
+                <button className="btn danger" onClick={showCancelPreview}>Cancel (100% Refund)</button>
+              </div>
+            </div>
+          )}
+
           <div className="card">
             <h2>Actions</h2>
             {s === 'pending_payment' && (
@@ -121,12 +155,12 @@ export default function BookingDetail() {
             )}
             {['waiting_for_professional', 'accepted'].includes(s) && (
               <>
-                <button className="btn danger" onClick={showCancelPreview}>Cancel Booking (pehle preview dekhein)</button>
+                <button className="btn danger" onClick={showCancelPreview}>Cancel Booking (see preview first)</button>
                 <div className="alert info mt">
                   <b>Cancellation policy (Section 10.1):</b>
                   <ul style={{ paddingLeft: 18, marginTop: 6 }}>
-                    <li>Professional ne accept nahi kiya → <b>100% refund</b> turant wallet mein</li>
-                    <li>Professional ne accept kar liya → <b>85% refund</b> (15% cut: 10% professional compensation + 5% platform — admin-configurable)</li>
+                    <li>Professional has not accepted → <b>100% refund</b> to your wallet instantly</li>
+                    <li>Professional has accepted → <b>85% refund</b> (15% cut: 10% professional compensation + 5% platform — admin-configurable)</li>
                     <li>Professional cancel kare → <b>100% refund</b> + professional par 10% penalty (agli payout se auto-cut)</li>
                   </ul>
                 </div>
@@ -136,7 +170,7 @@ export default function BookingDetail() {
 
           <div className="card">
             <h2>Chat (numbers hidden)</h2>
-            <p className="muted mb">Aap ke messages sirf professional <b>{booking.professional_name}</b> ko jaate hain.</p>
+            <p className="muted mb">Your messages go only to the professional, <b>{booking.professional_name}</b>.</p>
             <div className="chat-box">
               {messages.length === 0 && <p className="muted">No messages yet. Keep conversation on-platform — sharing phone numbers/WhatsApp is flagged.</p>}
               {messages.map((m) => (
@@ -152,6 +186,11 @@ export default function BookingDetail() {
           </div>
         </div>
       </div>
+
+      {/* Live location tracking (deal hone ke baad) */}
+      {['accepted', 'on_the_way', 'arrived', 'work_started'].includes(s) && (
+        <LiveMap booking={booking} role="customer" token={token} onUpdate={load} />
+      )}
 
       <CancelPreviewModal preview={cancelPreview} onConfirm={doCancel} onClose={() => setCancelPreview(null)} confirmLabel="Haan, Cancel Karein (refund wallet mein)" />
     </Layout>

@@ -146,6 +146,15 @@ a { color: var(--green); text-decoration: none; }
 
 .grid { display: grid; gap: 16px; }
 .grid.cols-2 { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+
+/* Login/register tabs */
+.tabs { display: flex; gap: 6; margin: 12px 0; border-bottom: 2px solid var(--border); }
+.tabs .tab {
+  padding: 8px 14px; background: none; border: none; border-bottom: 3px solid transparent;
+  font-weight: 600; color: var(--muted); cursor: pointer; margin-bottom: -2px; font-size: 13.5px;
+}
+.tabs .tab.active { color: var(--green-dark); border-bottom-color: var(--green); }
+.pin-icon { background: none; border: none; }
 .grid.cols-3 { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .grid.cols-4 { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 

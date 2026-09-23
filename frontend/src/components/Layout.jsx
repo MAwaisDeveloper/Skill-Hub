@@ -8,8 +8,17 @@ const MENUS = {
     { to: '/customer', label: 'Overview', ico: '⌂' },
     { to: '/book', label: 'Book a Service', ico: '➕' },
     { to: '/customer/bookings', label: 'My Bookings', ico: '🗂' },
-    { to: '/customer/wallet', label: 'Wallet & Statement', ico: '👛' },
+    {
+      label: 'Wallet', ico: '👛', children: [
+        { to: '/customer/wallet', label: 'Statement & Balance' },
+        { to: '/wallet-data/wallet_transactions', label: 'Transactions' },
+        { to: '/wallet-data/wallet_topups', label: 'Top-ups (JazzCash/Easypaisa)' },
+        { to: '/wallet-data/payments', label: 'Payments' },
+        { to: '/wallet-data/refunds', label: 'My Refunds' },
+      ],
+    },
     { to: '/customer/contracts', label: 'Bulk / Contract Hire', ico: '📑' },
+    { to: '/wallet-data/reviews', label: 'My Reviews', ico: '★' },
     { to: '/customer/profile', label: 'Profile & Addresses', ico: '👤' },
     { to: '/customer/notifications', label: 'Notifications', ico: '🔔' },
     { to: '/settings', label: 'Settings & Profile', ico: '⚙' },
@@ -18,9 +27,18 @@ const MENUS = {
   professional: [
     { to: '/professional', label: 'Overview', ico: '⌂' },
     { to: '/professional/jobs', label: 'Job Requests', ico: '🛠' },
-    { to: '/professional/wallet', label: 'Wallet & Earnings', ico: '👛' },
+    {
+      label: 'Wallet', ico: '👛', children: [
+        { to: '/professional/wallet', label: 'Earnings & Statement' },
+        { to: '/wallet-data/wallet_transactions', label: 'Transactions' },
+        { to: '/wallet-data/payouts', label: 'Payouts' },
+        { to: '/wallet-data/withdrawals', label: 'Withdrawals' },
+        { to: '/wallet-data/professional_penalties', label: 'My Penalties' },
+      ],
+    },
     { to: '/professional/slots', label: 'Availability Slots', ico: '🗓' },
     { to: '/professional/contracts', label: 'Contract Marketplace', ico: '📑' },
+    { to: '/wallet-data/reviews', label: 'Reviews Received', ico: '★' },
     { to: '/professional/profile', label: 'Profile & Verification', ico: '✅' },
     { to: '/professional/notifications', label: 'Notifications', ico: '🔔' },
     { to: '/settings', label: 'Settings & Profile', ico: '⚙' },
@@ -119,6 +137,29 @@ function ModulesSection({ role, onNavigate }) {
   );
 };
 
+// Expandable sidebar group (Wallet ▾ style)
+function SideGroup({ item, onNavigate }) {
+  const active = item.children.some((c) => window.location.pathname === c.to);
+  const [open, setOpen] = useState(active);
+  return (
+    <div className="side-section">
+      <button type="button" className={`side-link section-toggle ${open ? 'open' : ''}`} onClick={() => setOpen(!open)}>
+        <span className="ico">{item.ico}</span> {item.label}
+        <span className="chev">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="side-sub">
+          {item.children.map((c) => (
+            <NavLink key={c.to + c.label} to={c.to} className={({ isActive }) => `side-link sub ${isActive ? 'active' : ''}`} onClick={onNavigate}>
+              <span className="ico">·</span> {c.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Layout({ children, title, subtitle, actions }) {
   const { session, logout } = useApp();
   const navigate = useNavigate();
@@ -147,17 +188,21 @@ export default function Layout({ children, title, subtitle, actions }) {
   const sidebar = (
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
       <div className="side-label">{role === 'admin' ? 'Administration' : role === 'professional' ? 'Professional Panel' : 'Customer Panel'}</div>
-      {menu.map((m) => (
-        <NavLink
-          key={m.to + m.label}
-          to={m.to}
-          state={m.tab ? { tab: m.tab } : undefined}
-          className={({ isActive }) => `side-link ${isActive && !m.tab ? 'active' : ''}`}
-          onClick={() => setMenuOpen(false)}
-        >
-          <span className="ico">{m.ico}</span> {m.label}
-        </NavLink>
-      ))}
+      {menu.map((m) =>
+        m.children ? (
+          <SideGroup key={m.label} item={m} onNavigate={() => setMenuOpen(false)} />
+        ) : (
+          <NavLink
+            key={m.to + m.label}
+            to={m.to}
+            state={m.tab ? { tab: m.tab } : undefined}
+            className={({ isActive }) => `side-link ${isActive && !m.tab ? 'active' : ''}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            <span className="ico">{m.ico}</span> {m.label}
+          </NavLink>
+        )
+      )}
       <ModulesSection role={role} onNavigate={() => setMenuOpen(false)} />
       <div className="side-footer">
         Hunar Platform v1.0<br />Verified Skill, Trusted Service

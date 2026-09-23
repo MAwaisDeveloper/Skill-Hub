@@ -238,6 +238,23 @@ router.post('/contracts/:id/award/:bidId', ...customerOnly, asyncHandler(async (
   res.json(await contractService.awardContract(req.user.id, Number(req.params.id), Number(req.params.bidId)));
 }));
 
+// Awarded contract ke milestones (release progress ke sath)
+router.get('/contracts/:id/milestones', ...customerOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT cm.* FROM contract_milestones cm
+     JOIN contracts ct ON ct.id = cm.contract_id
+     JOIN customers cu ON cu.id = ct.customer_id
+     WHERE cm.contract_id = ? AND cu.user_id = ? ORDER BY cm.milestone_no`,
+    [Number(req.params.id), req.user.id]
+  );
+  res.json(rows);
+}));
+
+// Milestone confirm & release: escrow -> commission cut -> pro wallet (Section 11)
+router.post('/contracts/:id/milestones/:no/release', ...customerOnly, asyncHandler(async (req, res) => {
+  res.json(await contractService.releaseMilestone(req.user.id, Number(req.params.id), Number(req.params.no)));
+}));
+
 // ---- Notifications ----
 router.get('/notifications', ...customerOnly, asyncHandler(async (req, res) => {
   res.json(await notificationService.list(req.user.id, req.query));

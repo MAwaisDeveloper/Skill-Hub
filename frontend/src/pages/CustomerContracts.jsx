@@ -57,6 +57,28 @@ export default function CustomerContracts() {
     } catch (e) { setError(e.message); }
   };
 
+  const [milestones, setMilestones] = useState({});
+  const [releasing, setReleasing] = useState(null);
+
+  const openMilestones = async (contractId) => {
+    setError('');
+    try {
+      const rows = await api.get(`/customer/contracts/${contractId}/milestones`, token);
+      setMilestones({ ...milestones, [contractId]: rows });
+    } catch (e) { setError(e.message); }
+  };
+
+  const releaseMs = async (contractId, no) => {
+    setError(''); setMsg(''); setReleasing(no);
+    try {
+      const res = await api.post(`/customer/contracts/${contractId}/milestones/${no}/release`, {}, token);
+      setMsg(`✓ Milestone ${no} released! Amount Rs ${Number(res.amount).toLocaleString()} — commission Rs ${Number(res.commission).toLocaleString()} (10%) cut, professional ko Rs ${Number(res.pro_received).toLocaleString()} mile.${res.contract_status === 'completed' ? ' 🎉 Contract COMPLETE ho gaya!' : ` Baqi milestones: ${res.milestones_left}`}`);
+      await openMilestones(contractId);
+      await load();
+    } catch (e) { setError(e.message); }
+    setReleasing(null);
+  };
+
   return (
     <Layout title="Bulk / Contract Hiring" subtitle="Hire multiple verified professionals on contract — milestone-based payments">
       {msg && <div className="alert success">{msg}</div>}
@@ -126,6 +148,45 @@ export default function CustomerContracts() {
                   </tbody>
                 </table>
               )
+          )}
+
+          {/* Milestones — awarded/in-progress contracts ke liye */}
+          {['awarded', 'in_progress', 'completed'].includes(c.status) && (
+            <div className="mt" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              {!milestones[c.id] ? (
+                <button className="btn small secondary" onClick={() => openMilestones(c.id)}>📋 View Milestones (release payments)</button>
+              ) : (
+                <>
+                  <h3 style={{ marginBottom: 8 }}>📋 Milestones — confirm the work, only then is payment released to the professional</h3>
+                  <table>
+                    <thead><tr><th>#</th><th>Description</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                      {milestones[c.id].map((m) => (
+                        <tr key={m.id}>
+                          <td><b>{m.milestone_no}</b>{m.milestone_no === 1 ? ' (deposit)' : ''}</td>
+                          <td>{m.description}{m.released_at && <div className="muted" style={{ fontSize: 12 }}>Released: {String(m.released_at).slice(0, 16)}</div>}</td>
+                          <td><b>{fmt(m.amount)}</b></td>
+                          <td><StatusBadge status={m.status === 'held' ? 'waiting_for_professional' : m.status} /></td>
+                          <td>
+                            {m.status !== 'released' && m.status !== 'disputed' && c.status !== 'completed' && (
+                              <button
+                                className="btn small"
+                                disabled={releasing === m.milestone_no}
+                                onClick={() => { if (window.confirm(`Confirm milestone ${m.milestone_no}? Rs ${Number(m.amount).toLocaleString()} will be released (10% commission deducted, 90% goes to the professional).`)) releaseMs(c.id, m.milestone_no); }}
+                              >
+                                {releasing === m.milestone_no ? '⏳…' : '✓ Confirm & Release'}
+                              </button>
+                            )}
+                            {m.status === 'released' && <span className="badge verified">✓ Released</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="muted mt" style={{ fontSize: 13 }}>A 10% platform commission is deducted on each release — the remaining 90% goes to the professional's wallet. Milestones are released in order.</p>
+                </>
+              )}
+            </div>
           )}
         </div>
       ))}

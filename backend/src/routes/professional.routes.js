@@ -272,24 +272,47 @@ router.get('/wallet/withdrawals', ...proOnly, asyncHandler(async (req, res) => {
   res.json(await listMine(req.user.id));
 }));
 
+// Payouts ledger — job payouts + contract milestone payouts (invoiciable)
+router.get('/payouts', ...proOnly, asyncHandler(async (req, res) => {
+  const proId = await getProId(req.user.id);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const perPage = 15;
+  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM payouts WHERE professional_id = ?`, [proId]);
+  const [rows] = await pool.query(
+    `SELECT p.*, b.booking_code, c.name AS category_name
+     FROM payouts p
+     LEFT JOIN bookings b ON b.id = p.booking_id
+     LEFT JOIN categories c ON c.id = b.category_id
+     WHERE p.professional_id = ? ORDER BY p.id DESC LIMIT ? OFFSET ?`,
+    [proId, perPage, (page - 1) * perPage]
+  );
+  res.json({ rows, pagination: { page, per_page: perPage, total, total_pages: Math.ceil(total / perPage) } });
+}));
+
 // ---- Contracts ----
 router.get('/contracts', ...proOnly, asyncHandler(async (req, res) => {
   const proId = await getProId(req.user.id);
+  const base = `SELECT ct.*, c.name AS category_name,
+     (SELECT cb.status FROM contract_bids cb WHERE cb.contract_id = ct.id AND cb.professional_id = ? LIMIT 1) AS my_bid_status,
+     (SELECT cb.id FROM contract_bids cb WHERE cb.contract_id = ct.id AND cb.professional_id = ? LIMIT 1) AS my_bid_id,
+     EXISTS (SELECT 1 FROM professional_categories pc WHERE pc.professional_id = ? AND pc.category_id = ct.category_id) AS matches_me
+   FROM contracts ct JOIN categories c ON c.id = ct.category_id`;
+  if (req.query.all === '1') {
+    const [rows] = await pool.query(`${base} WHERE ct.status = 'open' ORDER BY matches_me DESC, ct.created_at DESC`, [proId, proId, proId]);
+    return res.json(rows);
+  }
   const [rows] = await pool.query(
-    `SELECT ct.*, c.name AS category_name,
-       (SELECT cb.status FROM contract_bids cb WHERE cb.contract_id = ct.id AND cb.professional_id = ? LIMIT 1) AS my_bid_status,
-       (SELECT cb.id FROM contract_bids cb WHERE cb.contract_id = ct.id AND cb.professional_id = ? LIMIT 1) AS my_bid_id
-     FROM contracts ct JOIN categories c ON c.id = ct.category_id
+    `${base}
      WHERE ct.status = 'open' AND (
        EXISTS (SELECT 1 FROM professional_categories pc WHERE pc.professional_id = ? AND pc.category_id = ct.category_id)
        OR NOT EXISTS (SELECT 1 FROM professional_categories pc WHERE pc.professional_id = ?)
      )
      ORDER BY ct.created_at DESC`,
-    [proId, proId, proId, proId]
+    [proId, proId, proId, proId, proId]
   );
   // awarded/in-progress contracts jis mein mera selected bid hai
   const [mine] = await pool.query(
-    `SELECT ct.*, c.name AS category_name, 'awarded' AS my_bid_status
+    `SELECT ct.*, c.name AS category_name, 'awarded' AS my_bid_status, 1 AS matches_me
      FROM contracts ct JOIN categories c ON c.id = ct.category_id
      WHERE ct.awarded_bid_id IN (SELECT id FROM contract_bids WHERE professional_id = ?) AND ct.status != 'open'`,
     [proId]

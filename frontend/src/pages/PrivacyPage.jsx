@@ -3,40 +3,40 @@ import Layout from '../components/Layout';
 
 export default function PrivacyPage() {
   return (
-    <Layout title="Privacy Policy" subtitle="Aap ka data kaise protect hota hai — Hunar Platform">
+    <Layout title="Privacy Policy" subtitle="How your data is protected — Hunar Platform">
       <div className="card">
-        <h2>1. Hum kaunsi information collect karte hain</h2>
+        <h2>1. Information we collect</h2>
         <ul style={{ paddingLeft: 20, lineHeight: 1.9 }}>
-          <li><b>Account:</b> phone number (login), naam, optional email, preferred language</li>
-          <li><b>Customers:</b> saved addresses (map pin ke sath), booking history, trust score</li>
+          <li><b>Account:</b> phone number (login), name, optional email, preferred language</li>
+          <li><b>Customers:</b> saved addresses (with map pins), booking history, trust score</li>
           <li><b>Professionals:</b> CNIC number + CNIC front/back photos, live selfie, experience, service areas, payout account</li>
-          <li><b>Wallet:</b> top-ups, escrow holds, releases, refunds, withdrawals — poora ledger</li>
-          <li><b>Chat:</b> booking-linked messages (contact-info filter ke sath)</li>
+          <li><b>Wallet:</b> top-ups, escrow holds, releases, refunds, withdrawals — the complete ledger</li>
+          <li><b>Chat:</b> booking-linked messages (with contact-info filtering)</li>
         </ul>
       </div>
       <div className="card">
-        <h2>2. Aap ka data kaise use hota hai</h2>
+        <h2>2. How your data is used</h2>
         <ul style={{ paddingLeft: 20, lineHeight: 1.9 }}>
-          <li>Bookings process karne aur escrow payments secure rakhne ke liye</li>
-          <li>Manual verification — sirf authorized admin aap ke documents dekhta hai, audit log ke sath</li>
-          <li>Disputes resolve karne ke liye — paisa tab tak held rehta hai jab tak decision na ho</li>
-          <li>Commission calculate karne ke liye (10% sirf released deals par)</li>
+          <li>To process bookings and keep escrow payments secure</li>
+          <li>Manual verification — only an authorized admin sees your documents, with an audit log</li>
+          <li>To resolve disputes — funds remain held until a decision is made</li>
+          <li>To calculate commission (10% only on released deals)</li>
         </ul>
       </div>
       <div className="card">
-        <h2>3. Jo hum KABHI nahi karte</h2>
+        <h2>3. What we NEVER do</h2>
         <ul style={{ paddingLeft: 20, lineHeight: 1.9 }}>
-          <li>Aap ka JazzCash/Easypaisa <b>PIN kabhi collect nahi hota</b> — payment gateway ke apne secure page par hota hai</li>
-          <li>Phone numbers customers/professionals ke beech <b>share nahi hote</b> — in-app chat use hoti hai</li>
-          <li>Aap ka data kisi third-party ko becha nahi jaata</li>
+          <li>Your JazzCash/Easypaisa <b>PIN is never collected</b> — it is entered on the payment gateway's own secure page</li>
+          <li>Phone numbers are <b>not shared</b> between customers and professionals — in-app chat is used instead</li>
+          <li>Your data is never sold to any third party</li>
         </ul>
       </div>
       <div className="card">
-        <h2>4. Aap ke rights</h2>
+        <h2>4. Your rights</h2>
         <ul style={{ paddingLeft: 20, lineHeight: 1.9 }}>
-          <li>Apni profile kabhi bhi update karein (Settings)</li>
-          <li>Account suspension par poora ledger + history accessible rehta hai</li>
-          <li>Data deletion request: admin@hunar.pk (active bookings settle hone ke baad)</li>
+          <li>Update your profile anytime (Settings)</li>
+          <li>On account suspension, the full ledger and history remain accessible</li>
+          <li>Data deletion requests: admin@hunar.pk (after active bookings are settled)</li>
         </ul>
       </div>
     </Layout>

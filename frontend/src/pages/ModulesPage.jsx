@@ -22,8 +22,8 @@ export default function ModulesPage() {
     <Layout
       title={role === 'admin' ? 'All Database Modules' : 'My Modules'}
       subtitle={role === 'admin'
-        ? 'Plan ke saare 27 modules + 3 support tables — live row counts ke sath (Section 12)'
-        : 'Plan ki tables mein se aap se related modules aur aap ka live data'}
+        ? 'All 27 plan modules + 3 support tables — with live row counts (Section 12)'
+        : 'Your relevant modules from the plan tables, with your live data'}
     >
       {error && <div className="alert error">{error}</div>}
 
