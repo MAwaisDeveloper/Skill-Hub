@@ -20,6 +20,16 @@ export default function ProBookingDetail() {
   const [lateForm, setLateForm] = useState({ reason: '', new_eta_minutes: '' });
   const [showLate, setShowLate] = useState(false);
 
+  // Chat auto-refresh (5s) jab tak booking active hai
+  useEffect(() => {
+    if (!['completed', 'cancelled', 'refunded', 'disputed'].includes(booking?.status)) {
+      const t = setInterval(() => {
+        api.get(`/professional/bookings/${id}/messages`, token).then(setMessages).catch(() => {});
+      }, 5000);
+      return () => clearInterval(t);
+    }
+  }, [id, token, booking?.status]);
+
   const showCancelPreview = async () => {
     setError('');
     try {
@@ -114,6 +124,10 @@ export default function ProBookingDetail() {
           <h2>Job Details</h2>
           <p><b>Address:</b> {booking.customer_address || '—'}</p>
           <p className="muted">{booking.description}</p>
+          <div className="divider" />
+          <h2 style={{ marginBottom: 6 }}>🤝 Trust</h2>
+          <p style={{ fontSize: 13.5 }}><b>{booking.customer_name}</b> · Trust Score <b style={{ color: 'var(--green-dark)' }}>{Number(booking.customer_trust_score ?? 100)}</b>/100 · {booking.customer_completed_jobs ?? 0} completed bookings</p>
+          <p className="muted" style={{ fontSize: 13 }}>Aap ka trust score: <b>{Number(booking.my_trust_score ?? 100)}</b>/100 — customer verified hai; payment escrow mein already held hai.</p>
 
           {/* Accept with arrival promise */}
           {booking.status === 'waiting_for_professional' && booking.offer_status !== 'pending' && (
@@ -185,12 +199,12 @@ export default function ProBookingDetail() {
           <div className="chat-box">
             {messages.map((m) => (
               <div key={m.id} className={`chat-msg ${m.sender_id === session.user.id ? 'mine' : 'theirs'} ${m.flagged ? 'flagged' : ''}`}>
-                <div style={{ fontSize: 11, opacity: 0.8 }}>{m.sender_name || m.sender_phone} · {String(m.created_at).slice(0, 16)}</div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>{m.sender_name || m.sender_phone} · {String(m.created_at).slice(11, 16)}</div>
                 {m.text}{m.flagged ? ' ⚠' : ''}
               </div>
             ))}
           </div>
-          <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Type a message…" />
+          <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Message likhein…" onKeyDown={(e) => e.key === 'Enter' && send()} />
           <button className="btn small mt" onClick={send}>Send</button>
         </div>
       </div>

@@ -119,19 +119,25 @@ router.get('/bookings', ...customerOnly, asyncHandler(async (req, res) => {
 
 router.get('/bookings/:id', ...customerOnly, asyncHandler(async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT b.*, c.name AS category_name, sp.full_name AS professional_name, u.phone AS professional_phone_masked, sp.average_rating
+    `SELECT b.*, c.name AS category_name, sp.full_name AS professional_name, u.phone AS professional_phone_masked, sp.average_rating,
+            sp.trust_score AS professional_trust_score, sp.completed_jobs AS professional_completed_jobs,
+            (SELECT GROUP_CONCAT(sa.area) FROM service_areas sa WHERE sa.professional_id = sp.id) AS professional_areas,
+            COALESCE(b.dest_lat, ca.latitude) AS dest_lat, COALESCE(b.dest_lng, ca.longitude) AS dest_lng,
+            COALESCE(b.service_address, ca.full_address) AS dest_address
      FROM bookings b
      JOIN categories c ON c.id = b.category_id
      JOIN service_professionals sp ON sp.id = b.professional_id
      JOIN users u ON u.id = sp.user_id
      JOIN customers cu ON cu.id = b.customer_id JOIN users cuu ON cuu.id = cu.user_id
+     LEFT JOIN customer_addresses ca ON ca.id = b.address_id
      WHERE b.id = ? AND cuu.id = ?`,
     [Number(req.params.id), req.user.id]
   );
   if (!rows.length) throw new HttpError(404, 'Booking not found');
   const booking = rows[0];
   const [events] = await pool.query(`SELECT * FROM booking_events WHERE booking_id = ? ORDER BY id ASC`, [booking.id]);
-  res.json({ ...booking, timeline: events });
+  const [myTrust] = await pool.query(`SELECT score FROM trust_scores WHERE user_id = ?`, [req.user.id]);
+  res.json({ ...booking, timeline: events, my_trust_score: myTrust[0]?.score ?? 100 });
 }));
 
 // ---- Reviews (completed bookings only) ----
@@ -213,6 +219,46 @@ router.post('/wallet/topup/:reference/confirm', ...customerOnly, asyncHandler(as
 
 router.get('/wallet/topup/:reference', ...customerOnly, asyncHandler(async (req, res) => {
   res.json(await paymentService.getTopupStatus(req.user.id, req.params.reference));
+}));
+
+// ---- Trust score (real-case style: customer khud apna record dekhe) ----
+router.get('/trust-score', ...customerOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(`SELECT score, flags_count FROM trust_scores WHERE user_id = ?`, [req.user.id]);
+  res.json(rows[0] || { score: 100, flags_count: 0 });
+}));
+
+// ---- My top-ups (JazzCash/Easypaisa record) ----
+router.get('/wallet/topups', ...customerOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT t.* FROM wallet_topups t JOIN wallets w ON w.id = t.wallet_id WHERE w.user_id = ? ORDER BY t.id DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(rows);
+}));
+
+// ---- My refunds (cancellation/dispute) ----
+router.get('/wallet/refunds', ...customerOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT r.*, b.booking_code FROM refunds r JOIN bookings b ON b.id = r.booking_id
+     JOIN customers c ON c.id = b.customer_id WHERE c.user_id = ? ORDER BY r.id DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(rows);
+}));
+
+// ---- My Reviews (jo maine diye) ----
+router.get('/reviews', ...customerOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT r.*, b.booking_code, c.name AS category_name, sp.full_name AS professional_name, sp.average_rating AS professional_now_rating
+     FROM reviews r
+     JOIN bookings b ON b.id = r.booking_id
+     JOIN categories c ON c.id = b.category_id
+     JOIN service_professionals sp ON sp.id = r.professional_id
+     JOIN customers cu ON cu.id = r.customer_id
+     WHERE cu.user_id = ? ORDER BY r.created_at DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(rows);
 }));
 
 // ---- Contracts (Section 11) ----

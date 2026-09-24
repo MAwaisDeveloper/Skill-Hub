@@ -19,6 +19,16 @@ export default function BookingDetail() {
   const [error, setError] = useState('');
   const [cancelPreview, setCancelPreview] = useState(null);
 
+  // Chat auto-refresh (5s) jab tak booking active hai — real messaging app feel
+  useEffect(() => {
+    if (!['completed', 'cancelled', 'refunded', 'disputed'].includes(booking?.status)) {
+      const t = setInterval(() => {
+        api.get(`/customer/bookings/${id}/messages`, token).then(setMessages).catch(() => {});
+      }, 5000);
+      return () => clearInterval(t);
+    }
+  }, [id, token, booking?.status]);
+
   const showCancelPreview = async () => {
     setError('');
     try {
@@ -71,6 +81,12 @@ export default function BookingDetail() {
           <p><b>Price:</b> {fmt(booking.final_price)} <span className="muted">(locked at booking)</span></p>
           <p><b>Address:</b> {booking.service_address || 'Saved address'}</p>
           <p className="muted">Description: {booking.description || '—'}</p>
+          <div className="divider" />
+          <h2 style={{ marginBottom: 6 }}>🤝 Trust</h2>
+          <p style={{ fontSize: 13.5 }}><b>{booking.professional_name}</b> · Trust Score <b style={{ color: 'var(--green-dark)' }}>{Number(booking.professional_trust_score ?? 100)}</b>/100
+            {' · '}★ {booking.average_rating} · {booking.professional_completed_jobs ?? 0} jobs
+            {booking.professional_areas && <span className="muted"> · areas: {booking.professional_areas}</span>}</p>
+          <p className="muted" style={{ fontSize: 13 }}>Aap ka trust score: <b>{Number(booking.my_trust_score ?? 100)}</b>/100 — dono parties verified hain; number share karne ki zaroorat nahi, chat yahin hoti hai.</p>
 
           <h2 className="mt">Timeline</h2>
           <ul className="timeline">
@@ -175,13 +191,13 @@ export default function BookingDetail() {
               {messages.length === 0 && <p className="muted">No messages yet. Keep conversation on-platform — sharing phone numbers/WhatsApp is flagged.</p>}
               {messages.map((m) => (
                 <div key={m.id} className={`chat-msg ${m.sender_id === session.user.id ? 'mine' : 'theirs'} ${m.flagged ? 'flagged' : ''}`}>
-                  <div style={{ fontSize: 11, opacity: 0.8 }}>{m.sender_name || m.sender_phone} ({m.sender_role || ''}) · {String(m.created_at).slice(0, 16)}</div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>{m.sender_name || m.sender_phone} ({m.sender_role || ''}) · {String(m.created_at).slice(11, 16)}</div>
                   {m.text}
                   {m.flagged ? ' ⚠' : ''}
                 </div>
               ))}
             </div>
-            <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Type a message…" />
+            <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Message likhein…" onKeyDown={(e) => { if (e.key === 'Enter' && chatText.trim()) { act(() => api.post(`/customer/bookings/${id}/messages`, { text: chatText }, token)); setChatText(''); } }} />
             <button className="btn small mt" onClick={() => { if (chatText.trim()) { act(() => api.post(`/customer/bookings/${id}/messages`, { text: chatText }, token)); setChatText(''); } }}>Send</button>
           </div>
         </div>

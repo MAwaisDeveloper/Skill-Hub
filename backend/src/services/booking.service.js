@@ -2,6 +2,7 @@ const { pool, withTransaction } = require('../config/db');
 const { HttpError } = require('../middleware/error');
 const { getSettings, notify, adjustTrustScore, logBookingEvent } = require('../utils/helpers');
 const walletService = require('./wallet.service');
+const { haversineKm } = require('../utils/haversine');
 
 const ACTIVE_STATUSES = ['waiting_for_professional', 'accepted', 'on_the_way', 'arrived', 'work_started', 'work_completed'];
 
@@ -119,6 +120,17 @@ async function createBooking(customerUserId, payload) {
   if (!custRows.length) throw new HttpError(400, 'Customer profile missing');
   const customerId = custRows[0].id;
 
+  // Destination (kaam ki jagah): saved address ka pin — live map par RED pin isi ko dikhega
+  let destLat = null, destLng = null, serviceAddress = null;
+  if (address_id) {
+    const [addr] = await pool.query(`SELECT * FROM customer_addresses WHERE id = ?`, [address_id]);
+    if (addr.length) {
+      destLat = addr[0].latitude;
+      destLng = addr[0].longitude;
+      serviceAddress = [addr[0].full_address, addr[0].area].filter(Boolean).join(', ') || null;
+    }
+  }
+
   return withTransaction(async (conn) => {
     let slotLocked = false;
     if (slots.length) {
@@ -132,9 +144,9 @@ async function createBooking(customerUserId, payload) {
     }
 
     const [bres] = await conn.query(
-      `INSERT INTO bookings (booking_code, customer_id, professional_id, category_id, address_id, scheduled_date, scheduled_slot, description, final_price, otp_code, status, is_urgent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?)`,
-      [booking_code, customerId, pro.id, category_id, address_id || null, scheduled_date, scheduled_slot, description || null, final_price, otp_code, is_urgent ? 1 : 0]
+      `INSERT INTO bookings (booking_code, customer_id, professional_id, category_id, address_id, scheduled_date, scheduled_slot, description, final_price, otp_code, status, is_urgent, service_address, dest_lat, dest_lng)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?, ?)`,
+      [booking_code, customerId, pro.id, category_id, address_id || null, scheduled_date, scheduled_slot, description || null, final_price, otp_code, is_urgent ? 1 : 0, serviceAddress, destLat, destLng]
     );
     const bookingId = bres.insertId;
 
@@ -244,6 +256,10 @@ async function proStatus(proUserId, bookingId, nextStatus) {
     }
     await conn.query(`UPDATE bookings SET status = ? WHERE id = ?`, [nextStatus, bookingId]);
     await logBookingEvent(conn, bookingId, nextStatus, proUserId, null);
+    // Customer ko clear message — pata chale professional nikal chuka hai / pohanch gaya
+    if (nextStatus === 'on_the_way') {
+      await notify(ctx.customerUserId, 'booking', `🚗 Professional nikal chuka hai aap ki taraf — booking ${ctx.booking.booking_code}. Map par live rasta dekhen.`, bookingId);
+    }
     if (nextStatus === 'work_completed') {
       // start auto-release countdown (Section 8.4)
       const settings = await getSettings();
@@ -588,13 +604,38 @@ async function shareLocation(userId, role, bookingId, { lat, lng }) {
     const col = role === 'professional' ? 'pro' : 'customer';
     if (role === 'professional' && userId !== proUid) throw new HttpError(403, 'Not your booking');
     if (role === 'customer' && userId !== custUid) throw new HttpError(403, 'Not your booking');
+
+    // ---- GPS ARRIVAL DETECTION (150m) ----
+    // Professional apni location dest_lat/dest_lng ke qareeb le aaye -> one-time event:
+    //   1) booking_events mein 'arrived_gps' log
+    //   2) Customer ko: "professional pohanch gaya"
+    //   3) Professional ko: "Your Destination is Here"
+    let arrivedNow = false;
+    let remainingKm = null;
+    if (role === 'professional' && b.dest_lat && b.dest_lng) {
+      const dKm = haversineKm(la, ln, Number(b.dest_lat), Number(b.dest_lng));
+      remainingKm = Math.round(dKm * 100) / 100;
+      if (dKm <= 0.15 && b.status === 'on_the_way' && !b.arrived_gps_notified) {
+        arrivedNow = true;
+        await conn.query(`UPDATE bookings SET arrived_gps_notified = 1 WHERE id = ?`, [bookingId]);
+        await logBookingEvent(conn, bookingId, 'arrived_gps', userId, `Professional GPS se destination par (within 150m)`);
+        await notify(custUid, 'booking', `📍 Khushkhabri! ${'Professional'} aap ke address pohanch gaya hai — booking ${b.booking_code}. Wo aap se OTP mangen ge kaam shuru karne se pehle.`, bookingId);
+        await notify(proUid, 'booking', `🎯 Your Destination is Here! Aap kaam ki jagah pohanch gaye hain — customer ko batayen aur OTP lein.`, bookingId);
+      }
+    }
+
     await conn.query(
       `UPDATE bookings SET ${col}_lat = ?, ${col}_lng = ?, ${col}_loc_at = NOW() WHERE id = ?`,
       [la, ln, bookingId]
     );
-    const other = role === 'professional' ? custUid : proUid;
-    await notify(other, 'booking', `${role === 'professional' ? 'Professional' : 'Customer'} ne live location share ki on ${b.booking_code}`, bookingId);
-    return { shared: true, lat: la, lng: ln };
+    // Position share notification sirf pehli baar (har update par spam na ho)
+    const [prevLoc] = await conn.query(`SELECT ${col}_loc_at FROM bookings WHERE id = ?`, [bookingId]);
+    const isFirstShare = !prevLoc[0]?.[`${col}_loc_at`];
+    if (isFirstShare && !arrivedNow) {
+      const other = role === 'professional' ? custUid : proUid;
+      await notify(other, 'booking', `${role === 'professional' ? 'Professional' : 'Customer'} ne live location share ki on ${b.booking_code} — ab rasta map par dekhen`, bookingId);
+    }
+    return { shared: true, lat: la, lng: ln, arrived: arrivedNow, remaining_km: remainingKm };
   });
 }
 

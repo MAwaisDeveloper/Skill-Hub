@@ -166,7 +166,11 @@ router.get('/bookings', ...proOnly, asyncHandler(async (req, res) => {
 router.get('/bookings/:id', ...proOnly, asyncHandler(async (req, res) => {
   const proId = await getProId(req.user.id);
   const [rows] = await pool.query(
-    `SELECT b.*, c.name AS category_name, cu.full_name AS customer_name, ca.full_address AS customer_address
+    `SELECT b.*, c.name AS category_name, cu.full_name AS customer_name, ca.full_address AS customer_address,
+            cu.trust_score AS customer_trust_score,
+            (SELECT COUNT(*) FROM bookings b2 WHERE b2.customer_id = b.customer_id AND b2.status = 'completed') AS customer_completed_jobs,
+            COALESCE(b.dest_lat, ca.latitude) AS dest_lat, COALESCE(b.dest_lng, ca.longitude) AS dest_lng,
+            COALESCE(b.service_address, ca.full_address) AS dest_address
      FROM bookings b
      JOIN categories c ON c.id = b.category_id
      JOIN customers cu ON cu.id = b.customer_id
@@ -176,7 +180,8 @@ router.get('/bookings/:id', ...proOnly, asyncHandler(async (req, res) => {
   );
   if (!rows.length) throw new HttpError(404, 'Booking not found');
   const [events] = await pool.query(`SELECT * FROM booking_events WHERE booking_id = ? ORDER BY id ASC`, [rows[0].id]);
-  res.json({ ...rows[0], timeline: events });
+  const [myTrust] = await pool.query(`SELECT score FROM trust_scores WHERE user_id = ?`, [req.user.id]);
+  res.json({ ...rows[0], timeline: events, my_trust_score: myTrust[0]?.score ?? 100 });
 }));
 
 router.post('/bookings/:id/accept', ...proOnly, asyncHandler(async (req, res) => {

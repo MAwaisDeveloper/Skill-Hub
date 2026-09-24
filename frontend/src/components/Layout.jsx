@@ -5,136 +5,60 @@ import { api } from '../api';
 
 const MENUS = {
   customer: [
-    { to: '/customer', label: 'Overview', ico: '⌂' },
+    { to: '/customer', label: 'Dashboard', ico: '⌂' },
     { to: '/book', label: 'Book a Service', ico: '➕' },
     { to: '/customer/bookings', label: 'My Bookings', ico: '🗂' },
     {
-      label: 'Wallet', ico: '👛', children: [
-        { to: '/customer/wallet', label: 'Statement & Balance' },
-        { to: '/wallet-data/wallet_transactions', label: 'Transactions' },
-        { to: '/wallet-data/wallet_topups', label: 'Top-ups (JazzCash/Easypaisa)' },
-        { to: '/wallet-data/payments', label: 'Payments' },
-        { to: '/wallet-data/refunds', label: 'My Refunds' },
+      label: 'My Wallet', ico: '👛', children: [
+        { to: '/customer/wallet', label: 'Balance & Add Money' },
+        { to: '/customer/wallet/statement', label: 'Transaction History' },
+        { to: '/customer/wallet/topups', label: 'Top-ups (JazzCash/Easypaisa)' },
+        { to: '/customer/wallet/refunds', label: 'Refunds' },
       ],
     },
+    { to: '/customer/withdraw', label: 'Withdraw to JazzCash/Easypaisa', ico: '💸' },
     { to: '/customer/contracts', label: 'Bulk / Contract Hire', ico: '📑' },
-    { to: '/wallet-data/reviews', label: 'My Reviews', ico: '★' },
-    { to: '/customer/profile', label: 'Profile & Addresses', ico: '👤' },
+    { to: '/customer/reviews', label: 'My Reviews', ico: '★' },
     { to: '/customer/notifications', label: 'Notifications', ico: '🔔' },
-    { to: '/settings', label: 'Settings & Profile', ico: '⚙' },
+    { to: '/customer/profile', label: 'Profile & Addresses', ico: '👤' },
+    { to: '/settings', label: 'Settings', ico: '⚙' },
     { to: '/guide', label: 'How Hunar Works', ico: '📘' },
   ],
   professional: [
-    { to: '/professional', label: 'Overview', ico: '⌂' },
+    { to: '/professional', label: 'Dashboard', ico: '⌂' },
     { to: '/professional/jobs', label: 'Job Requests', ico: '🛠' },
     {
-      label: 'Wallet', ico: '👛', children: [
-        { to: '/professional/wallet', label: 'Earnings & Statement' },
-        { to: '/wallet-data/wallet_transactions', label: 'Transactions' },
-        { to: '/wallet-data/payouts', label: 'Payouts' },
-        { to: '/wallet-data/withdrawals', label: 'Withdrawals' },
-        { to: '/wallet-data/professional_penalties', label: 'My Penalties' },
+      label: 'My Wallet', ico: '👛', children: [
+        { to: '/professional/wallet', label: 'Earnings & Withdraw' },
+        { to: '/professional/wallet/statement', label: 'Transaction History' },
+        { to: '/professional/wallet/payouts', label: 'Payouts' },
       ],
     },
     { to: '/professional/slots', label: 'Availability Slots', ico: '🗓' },
     { to: '/professional/contracts', label: 'Contract Marketplace', ico: '📑' },
-    { to: '/wallet-data/reviews', label: 'Reviews Received', ico: '★' },
+    { to: '/professional/reviews', label: 'Reviews Received', ico: '★' },
     { to: '/professional/profile', label: 'Profile & Verification', ico: '✅' },
     { to: '/professional/notifications', label: 'Notifications', ico: '🔔' },
-    { to: '/settings', label: 'Settings & Profile', ico: '⚙' },
+    { to: '/settings', label: 'Settings', ico: '⚙' },
     { to: '/guide', label: 'How Hunar Works', ico: '📘' },
   ],
   admin: [
-    { to: '/admin', label: 'Overview', ico: '⌂' },
+    { to: '/admin', label: 'Dashboard', ico: '⌂' },
     { to: '/admin', label: 'Verifications', ico: '✅', tab: 'verifications' },
-    { to: '/admin', label: 'Bookings & Filters', ico: '🗂', tab: 'bookings' },
-    { to: '/admin', label: 'Wallets & Statements', ico: '👛', tab: 'wallets' },
+    { to: '/admin', label: 'Bookings', ico: '🗂', tab: 'bookings' },
+    { to: '/admin', label: 'Disputes', ico: '⚖', tab: 'disputes' },
+    { to: '/admin', label: 'Wallets', ico: '👛', tab: 'wallets' },
+    { to: '/admin', label: 'Transactions', ico: '💳', tab: 'transactions' },
     { to: '/admin', label: 'Top-ups', ico: '⬆', tab: 'topups' },
+    { to: '/admin', label: 'Withdrawals', ico: '💸', tab: 'payouts' },
     { to: '/admin', label: 'Penalties', ico: '⚠', tab: 'penalties' },
     { to: '/admin', label: 'Refunds', ico: '↩', tab: 'refunds' },
-    { to: '/admin', label: 'Disputes', ico: '⚖', tab: 'disputes' },
     { to: '/admin', label: 'Messages', ico: '💬', tab: 'messages' },
-    { to: '/admin', label: 'Payouts & Withdrawals', ico: '💸', tab: 'payouts' },
-    { to: '/admin', label: 'Users (All Roles)', ico: '👥', tab: 'users' },
+    { to: '/admin', label: 'Users', ico: '👥', tab: 'users' },
     { to: '/admin', label: 'Reports', ico: '📈', tab: 'reports' },
-    { to: '/admin', label: 'Settings', ico: '⚙', tab: 'settings' },
+    { to: '/admin', label: 'Platform Settings', ico: '⚙', tab: 'settings' },
     { to: '/settings', label: 'My Profile & Password', ico: '🔧' },
   ],
-};
-
-// Database modules tree (professional-projects style: expandable section with table links)
-const MODULE_TREE = {
-  customer: [
-    { table: 'bookings', label: 'Bookings' },
-    { table: 'wallets', label: 'Wallet' },
-    { table: 'wallet_transactions', label: 'Wallet Transactions' },
-    { table: 'wallet_topups', label: 'Wallet Top-ups' },
-    { table: 'payments', label: 'Payments' },
-    { table: 'commissions', label: 'Commission on my deals' },
-    { table: 'refunds', label: 'My Refunds' },
-    { table: 'contracts', label: 'My Contracts' },
-    { table: 'reviews', label: 'My Reviews' },
-    { table: 'notifications', label: 'Notifications' },
-    { table: 'platform_settings', label: 'Platform Rules' },
-  ],
-  professional: [
-    { table: 'bookings', label: 'My Jobs' },
-    { table: 'payouts', label: 'Payouts' },
-    { table: 'professional_penalties', label: 'My Penalties' },
-    { table: 'wallets', label: 'Wallet' },
-    { table: 'wallet_transactions', label: 'Wallet Transactions' },
-    { table: 'withdrawals', label: 'Withdrawals' },
-    { table: 'availability_slots', label: 'Availability Slots' },
-    { table: 'contract_bids', label: 'Contract Bids' },
-    { table: 'reviews', label: 'Reviews Received' },
-    { table: 'verification_logs', label: 'Verification Logs' },
-    { table: 'commissions', label: 'Commission on my deals' },
-    { table: 'platform_settings', label: 'Platform Rules' },
-  ],
-  admin: [
-    { table: 'users', label: 'Users (all roles)' },
-    { table: 'wallets', label: 'Wallets (all)' },
-    { table: 'wallet_transactions', label: 'Wallet Transactions (all)' },
-    { table: 'wallet_topups', label: 'Top-ups (all)' },
-    { table: 'withdrawals', label: 'Withdrawals (all)' },
-    { table: 'professional_penalties', label: 'Penalties (all)' },
-    { table: 'bookings', label: 'Bookings (all)' },
-    { table: 'messages', label: 'Messages (all)' },
-    { table: 'commissions', label: 'Commissions (all)' },
-    { table: 'payouts', label: 'Payouts (all)' },
-    { table: 'refunds', label: 'Refunds (all)' },
-    { table: 'disputes', label: 'Disputes (all)' },
-    { table: 'reviews', label: 'Reviews (all)' },
-    { table: 'contracts', label: 'Contracts (all)' },
-    { table: 'platform_settings', label: 'Platform Settings' },
-  ],
-};
-
-function ModulesSection({ role, onNavigate }) {
-  const [open, setOpen] = React.useState(window.location.pathname.includes('/modules'));
-  const tables = MODULE_TREE[role] || [];
-  return (
-    <div className="side-section">
-      <button type="button" className={`side-link section-toggle ${open ? 'open' : ''}`} onClick={() => setOpen(!open)}>
-        <span className="ico">🗃</span> Database Modules
-        <span className="chev">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div className="side-sub">
-          {role !== 'admin' && (
-            <NavLink to={`/${role}/modules`} className={({ isActive }) => `side-link sub ${isActive ? 'active' : ''}`} onClick={onNavigate}>
-              <span className="ico">▦</span> Modules Overview (live counts)
-            </NavLink>
-          )}
-          {tables.map((t) => (
-            <NavLink key={t.table} to={`/modules-data/${t.table}`} className={({ isActive }) => `side-link sub ${isActive ? 'active' : ''}`} onClick={onNavigate}>
-              <span className="ico">·</span> {t.label}
-            </NavLink>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 };
 
 // Expandable sidebar group (Wallet ▾ style)
@@ -176,7 +100,7 @@ export default function Layout({ children, title, subtitle, actions }) {
     };
     const ep = endpoints[role];
     if (!ep) return;
-    const fetchUnread = () => api.get(ep, session.token).then((rows) => setUnread(rows.length)).catch(() => {});
+    const fetchUnread = () => api.get(ep, session.token).then((rows) => setUnread(Array.isArray(rows) ? rows.length : 0)).catch(() => {});
     fetchUnread();
     const t = setInterval(fetchUnread, 15000);
     return () => clearInterval(t);
@@ -203,9 +127,8 @@ export default function Layout({ children, title, subtitle, actions }) {
           </NavLink>
         )
       )}
-      <ModulesSection role={role} onNavigate={() => setMenuOpen(false)} />
       <div className="side-footer">
-        Hunar Platform v1.0<br />Verified Skill, Trusted Service
+        Hunar Platform v2.0<br />Verified Skill, Trusted Service
       </div>
     </aside>
   );

@@ -285,6 +285,54 @@ td .muted { font-size: 12px; }
 .map-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
 .leaflet-container { height: 100%; width: 100%; }
 
+/* ===== Live navigation markers (InDrive/Uber-style) ===== */
+.live-pin-icon { background: none; border: none; }
+.live-marker { position: relative; display: flex; flex-direction: column; align-items: center; }
+.live-marker .marker-tag {
+  margin-top: 3px; background: rgba(13,31,23,0.82); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.live-marker .marker-tag.dest-tag { background: rgba(220,38,38,0.92); }
+
+/* Professional = ➤ green triangle (raste ki direction mein ghoomta hai) */
+.live-marker .nav-arrow {
+  font-size: 30px; line-height: 30px; color: #0e7a4a; font-weight: 900;
+  text-shadow: 0 0 3px #fff, 0 0 6px #fff, 0 2px 5px rgba(0,0,0,0.4);
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
+  transform-origin: center;
+}
+
+/* Arrival banner + stat highlight */
+.arrival-banner { font-size: 15px; font-weight: 700; border-left: 4px solid var(--green); }
+.card.stat.arrived { background: #f0faf4; }
+
+/* Professional = vehicle badge */
+.live-marker .vehicle {
+  width: 30px; height: 30px; border-radius: 50% 50% 50% 6px; background: #0e7a4a;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+  border: 2.5px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.35); transform: rotate(-45deg);
+}
+.live-marker .vehicle { line-height: 1; }
+.live-marker .vehicle > * { transform: rotate(45deg); }
+
+/* Destination = red pin (kaam ki jagah) */
+.live-marker .dest-pin { filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); }
+
+/* Map legend (map ke upar) */
+.map-legend {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  background: #f7faf8; border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 14px; margin-bottom: 10px; font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.map-legend .lg { display: flex; align-items: center; gap: 6px; }
+.map-legend .lg-arrow { color: #0e7a4a; font-weight: 900; font-size: 16px; }
+.map-legend .lg-emoji { font-size: 15px; }
+.map-legend .lg-pin {
+  width: 12px; height: 15px; display: inline-block;
+  background: #dc2626; clip-path: polygon(50% 100%, 0 35%, 0 20%, 20% 0, 80% 0, 100% 20%, 100% 35%);
+}
+.map-legend .lg-line { width: 20px; height: 4px; border-radius: 2px; background: #16a34a; display: inline-block; }
+
 /* ===== JazzCash-style statement: direction badges, filters, pagination, modal ===== */
 .badge.dir { font-weight: 700; font-size: 11.5px; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
 .badge.dir.in { background: #e5f5ec; color: var(--green-dark); border: 1px solid #bfe5cf; }
@@ -314,3 +362,97 @@ td .muted { font-size: 12px; }
 .side-link.sub { padding: 6px 14px 6px 34px; font-size: 12.5px; opacity: 0.85; }
 .side-link.sub .ico { font-size: 12px; width: 14px; }
 .side-link.sub:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* ===================== AUTH SPLIT SCREEN ===================== */
+.auth-split { min-height: 100vh; display: flex; }
+.auth-brand {
+  flex: 1.05; background: linear-gradient(150deg, var(--green-deep) 0%, #0c5a38 55%, #12855a 100%);
+  color: #fff; padding: 54px 48px; display: flex; flex-direction: column; justify-content: space-between;
+}
+.auth-brand-logo { font-size: 26px; font-weight: 800; display: flex; align-items: center; gap: 9px; margin-bottom: 34px; }
+.auth-brand-logo span:last-child, .auth-brand-logo span { color: var(--gold); }
+.auth-brand-logo .logo-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--gold); display: inline-block; }
+.auth-brand h1 { font-size: 34px; line-height: 1.2; margin-bottom: 14px; }
+.auth-brand p { opacity: 0.92; max-width: 430px; font-size: 15px; }
+.auth-points { list-style: none; margin-top: 26px; }
+.auth-points li { padding: 9px 0; font-size: 14.5px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.auth-brand-foot { font-size: 12px; opacity: 0.7; }
+.auth-form-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 36px 20px; background: var(--bg); }
+.auth-card { width: 100%; max-width: 430px; }
+@media (max-width: 860px) {
+  .auth-split { flex-direction: column; }
+  .auth-brand { padding: 30px 24px; }
+  .auth-brand h1 { font-size: 24px; }
+  .auth-points { display: none; }
+}
+
+/* Role select cards (register) */
+.role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+.role-card {
+  background: #f7faf8; border: 2px solid var(--border); border-radius: 12px; padding: 16px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: all 0.15s;
+  font-family: inherit; font-size: 14px;
+}
+.role-card:hover { border-color: var(--green); }
+.role-card.active { border-color: var(--green); background: #e9f5ee; }
+.role-card .rc-ico { font-size: 26px; }
+.role-card b { font-size: 14.5px; color: var(--green-deep); }
+.role-card .muted { font-size: 12px; }
+
+/* ===================== WALLET ===================== */
+.wallet-hero {
+  background: linear-gradient(135deg, var(--green-deep) 0%, var(--green) 70%, #14925f 100%);
+  color: #fff; border-radius: 16px; padding: 26px 30px; margin-bottom: 16px;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;
+  box-shadow: 0 8px 24px rgba(7, 61, 38, 0.35);
+}
+.wallet-hero .wh-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85; }
+.wallet-hero .wh-amount { font-size: 38px; font-weight: 800; letter-spacing: 0.5px; margin: 4px 0 8px; }
+.wallet-hero .wh-sub { font-size: 13px; opacity: 0.9; }
+.wh-trust { text-align: center; background: rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 20px; }
+.wh-trust .value { display: block; font-size: 30px; font-weight: 800; }
+.wh-trust .lbl { font-size: 11px; opacity: 0.85; }
+
+/* Provider cards (JazzCash / Easypaisa) */
+.provider-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 4px 0 10px; }
+.provider-card {
+  border: 2px solid var(--border); border-radius: 12px; padding: 14px 16px; text-align: left;
+  cursor: pointer; background: #fff; font-family: inherit; transition: all 0.15s; display: flex; flex-direction: column; gap: 3px;
+}
+.provider-card b { font-size: 16px; }
+.provider-card span { font-size: 12px; color: var(--muted); }
+.provider-card.prov-jazzcash b { color: #c8102e; }
+.provider-card.prov-easypaisa b { color: #00a94f; }
+.provider-card:hover { border-color: #9db8ab; }
+.provider-card.active.prov-jazzcash { border-color: #c8102e; background: #fdf1f3; }
+.provider-card.active.prov-easypaisa { border-color: #00a94f; background: #eefaf3; }
+
+/* Gateway (simulated JazzCash / Easypaisa hosted page) */
+.gateway { border-top-width: 4px; }
+.gateway.gw-jazzcash { border-top-color: #c8102e; }
+.gateway.gw-easypaisa { border-top-color: #00a94f; }
+.gw-head { display: flex; justify-content: space-between; align-items: center; }
+.gw-logo { font-weight: 800; font-size: 21px; letter-spacing: 0.4px; }
+.gw-head-jazz .gw-logo { color: #c8102e; }
+.gw-head-easy .gw-logo { color: #00a94f; }
+.gw-lock { font-size: 11.5px; color: var(--green-dark); background: #e2f5ea; padding: 3px 10px; border-radius: 999px; font-weight: 700; }
+.gw-amount { font-size: 34px; font-weight: 800; color: var(--text); margin: 12px 0 10px; }
+.btn.gw-btn-jazz { background: #c8102e; }
+.btn.gw-btn-jazz:hover { background: #a30c25; }
+.btn.gw-btn-easy { background: #00a94f; }
+.btn.gw-btn-easy:hover { background: #008f43; }
+
+/* ===================== ONBOARDING CHECKLIST ===================== */
+.onboarding { border-left: 4px solid var(--gold); }
+.onb-steps { display: flex; flex-direction: column; gap: 10px; }
+.onb-step { display: flex; align-items: center; gap: 14px; background: #f7faf8; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.onb-step .n {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0;
+}
+.onb-step.done .n { background: #7fc79d; }
+.onb-step > div { flex: 1; }
+.onb-step b { font-size: 14px; }
+
+/* Live route map legend colours */
+.route-dist { color: var(--info); font-weight: 800; }

@@ -68,29 +68,49 @@ export default function ProWallet() {
 
       <div className="grid cols-3">
         <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Available Balance</span></div>
-        <div className="card stat"><span className="value">{fmt(profile?.payout_account || '—')}</span><span className="label">Payout Account</span><span className="hint">{profile?.payout_provider || 'set in profile'}</span></div>
-        <div className="card stat"><span className="value">{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">locked against your bookings (info)</span></div>
+        <div className="card stat"><span className="value">{fmt(profile?.payout_account || '—')}</span><span className="label">Payout Account</span><span className="hint">{profile?.payout_provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} · profile se change karein</span></div>
+        <div className="card stat"><span className="value">{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">active bookings ke against (info)</span></div>
       </div>
 
       <div className="card">
         <h2>💸 Withdraw from Wallet</h2>
-        <p className="muted mb">Provider + number → verify the account title (shows the registered name, or Not Found) → request → admin transfers.</p>
-        <div className="row">
-          <select style={{ maxWidth: 150 }} value={wd.provider} onChange={(e) => { setWd({ ...wd, provider: e.target.value }); setTitle(null); }}>
-            <option value="jazzcash">JazzCash</option>
-            <option value="easypaisa">Easypaisa</option>
-          </select>
-          <input style={{ maxWidth: 190 }} placeholder="Account number (03...)" value={wd.account_number}
-            onChange={(e) => { setWd({ ...wd, account_number: e.target.value }); setTitle(null); }} />
-          <button className="btn secondary" onClick={checkTitle} disabled={!wd.account_number}>Verify Name</button>
-          <input style={{ maxWidth: 180 }} type="number" placeholder="Amount (min 500)" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <button className="btn" onClick={withdraw} disabled={!amount || (title != null && !title.found)}>Request Withdrawal</button>
+        <p className="muted mb">Provider + number → <b>naam verify</b> (registered holder dikhega, ya Not Found) → amount → request → admin transfer karega.</p>
+        <div className="provider-cards">
+          {[{ key: 'jazzcash', name: 'JazzCash', cls: 'prov-jazzcash', tag: 'Instant transfer' }, { key: 'easypaisa', name: 'Easypaisa', cls: 'prov-easypaisa', tag: 'Instant transfer' }].map((p) => (
+            <button key={p.key} type="button" className={`provider-card ${p.cls} ${wd.provider === p.key ? 'active' : ''}`} onClick={() => { setWd({ ...wd, provider: p.key }); setTitle(null); }}>
+              <b>{p.name}</b>
+              <span>{p.tag}</span>
+            </button>
+          ))}
         </div>
-        {title && (
-          title.found
-            ? <div className="alert success">✅ Account title: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
-            : <div className="alert error">❌ <b>Not Found</b> — no registered account on this number. Please check the number.</div>
-        )}
+        <div className="grid cols-2" style={{ gap: 14, marginTop: 8 }}>
+          <div>
+            <label>Account Number (03...)</label>
+            <div className="row">
+              <input style={{ maxWidth: 200 }} placeholder="03XXXXXXXXX" maxLength={11} value={wd.account_number}
+                onChange={(e) => { setWd({ ...wd, account_number: e.target.value }); setTitle(null); }} />
+              <button className="btn secondary" onClick={checkTitle} disabled={!wd.account_number}>Verify Name</button>
+            </div>
+            {title && (
+              title.found
+                ? <div className="alert success mt">✅ Account title: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
+                : <div className="alert error mt">❌ <b>Not Found</b> — is number par registered account nahi. Number check karein.</div>
+            )}
+          </div>
+          <div>
+            <label>Amount (min 500)</label>
+            <input type="number" placeholder="min 500" min={500} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {wallet && Number(wallet.balance) >= 500 && (
+              <button className="btn small secondary" onClick={() => setAmount(String(Math.floor(Number(wallet.balance))))}>Poora balance ({fmt(Math.floor(Number(wallet.balance)))})</button>
+            )}
+          </div>
+        </div>
+        <button className="btn mt" onClick={withdraw} disabled={!amount || (title != null && !title.found)}>Request Withdrawal</button>
+      </div>
+
+      <div className="row">
+        <a className="btn secondary small" href="/professional/wallet/statement">🧾 Full Transaction History</a>
+        <a className="btn secondary small" href="/professional/wallet/payouts">💰 Payouts detail</a>
       </div>
 
       <div className="grid cols-2">

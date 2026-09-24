@@ -1,38 +1,56 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { useNavigate, Link } from 'react-router-dom';
+import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
 import { StatementView } from '../components/ui';
+
+// Customer wallet — real mobile-wallet jaisa case:
+// 1) Add Money: provider card select -> number -> "Check Name" (owner ka naam ya Not Found)
+// 2) Amount -> secure gateway page (PIN wahan, Hunar kabhi PIN nahi dekhta)
+// 3) Withdraw: yahan se wallet → JazzCash/Easypaisa (admin transfer karta hai)
+const PROVIDERS = [
+  { key: 'jazzcash', name: 'JazzCash', cls: 'prov-jazzcash', tag: 'Instant · MobiCash network' },
+  { key: 'easypaisa', name: 'Easypaisa', cls: 'prov-easypaisa', tag: 'Instant · Telenor Microfinance' },
+];
 
 export default function CustomerWallet() {
   const { session } = useApp();
   const token = session?.token;
   const navigate = useNavigate();
   const [wallet, setWallet] = useState(null);
+  const [trust, setTrust] = useState(null);
   const [topup, setTopup] = useState({ provider: 'jazzcash', mobile_number: '', amount: '' });
   const [title, setTitle] = useState(null);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
   const load = async () => {
-    try { setWallet(await api.get('/customer/wallet', token)); } catch (e) { setError(e.message); }
+    try {
+      setWallet(await api.get('/customer/wallet', token));
+      api.get('/customer/trust-score', token).then(setTrust).catch(() => {});
+    } catch (e) { setError(e.message); }
   };
   useEffect(() => { load(); }, []);
 
   const checkTitle = async () => {
     setError(''); setTitle(null);
+    if (!/^03\d{9}$/.test(topup.mobile_number.trim())) { setError('Sahi mobile number likhein (03XXXXXXXXX)'); return; }
+    setChecking(true);
     try {
-      const res = await api.post('/customer/wallet/account-title', { provider: topup.provider, mobile_number: topup.mobile_number }, token);
+      const res = await api.post('/customer/wallet/account-title', { provider: topup.provider, mobile_number: topup.mobile_number.trim() }, token);
       setTitle(res);
     } catch (e) { setError(e.message); }
+    setChecking(false);
   };
 
   const startTopup = async () => {
     setError(''); setMsg('');
-    if (title && !title.found) { setError('No account found on this number (Not Found). Please check the number.'); return; }
+    if (!(Number(topup.amount) >= 100)) { setError('Minimum top-up Rs 100 hai'); return; }
+    if (title && !title.found) { setError('Is number par koi account registered nahi (Not Found). Number check karein.'); return; }
     try {
-      const res = await api.post('/customer/wallet/topup', { ...topup, amount: Number(topup.amount) }, token);
+      const res = await api.post('/customer/wallet/topup', { ...topup, amount: Number(topup.amount), mobile_number: topup.mobile_number.trim() }, token);
       navigate(res.redirect_url);
     } catch (e) { setError(e.message); }
   };
@@ -48,52 +66,90 @@ export default function CustomerWallet() {
     return api.get(`/customer/wallet/statement?${q.toString()}`, token);
   };
 
+  const score = Number(trust?.score ?? 100);
+
   return (
-    <Layout title="Wallet & Statement" subtitle="Incoming, outgoing and pending — every rupee recorded with the counterparty name">
+    <Layout title="My Wallet" subtitle="Balance, escrow aur transactions — sab kuch ek jagah, bilkul mobile wallet ki tarah">
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert success">{msg}</div>}
 
-      <div className="grid cols-2">
-        <div className="card stat">
-          <span className="value">{wallet ? new Intl.NumberFormat('en-PK').format(Number(wallet.balance)) : '…'}</span>
-          <span className="label">Available Balance</span>
+      {/* Wallet hero card */}
+      <div className="wallet-hero">
+        <div>
+          <div className="wh-label">Available Balance</div>
+          <div className="wh-amount">{wallet ? fmt(wallet.balance) : '…'}</div>
+          <div className="wh-sub">🔒 Held (escrow): <b>{wallet ? fmt(wallet.held_amount) : '…'}</b> — active bookings ke liye locked</div>
         </div>
-        <div className="card stat">
-          <span className="value">{wallet ? new Intl.NumberFormat('en-PK').format(Number(wallet.held_amount)) : '…'}</span>
-          <span className="label">Held (Escrow)</span>
-          <span className="hint">locked against active bookings</span>
+        <div className="wh-side">
+          <div className="wh-trust">
+            <span className="value" style={{ color: score >= 80 ? '#b9f6ca' : score >= 50 ? '#ffe082' : '#ffab91' }}>{score}</span>
+            <span className="lbl">Trust Score / 100</span>
+          </div>
         </div>
       </div>
 
+      {/* Quick actions */}
+      <div className="grid cols-3">
+        <a className="card stat" href="/customer/wallet" style={{ textDecoration: 'none' }}>
+          <span className="value" style={{ fontSize: 20 }}>⬆️ Add Money</span>
+          <span className="label">JazzCash / Easypaisa se</span>
+        </a>
+        <Link className="card stat" to="/customer/withdraw" style={{ textDecoration: 'none' }}>
+          <span className="value" style={{ fontSize: 20 }}>💸 Withdraw</span>
+          <span className="label">Apne mobile account par</span>
+        </Link>
+        <Link className="card stat" to="/customer/wallet/statement" style={{ textDecoration: 'none' }}>
+          <span className="value" style={{ fontSize: 20 }}>🧾 Statement</span>
+          <span className="label">Har entry ke naam ke sath</span>
+        </Link>
+      </div>
+
+      {/* Add Money card */}
       <div className="card">
         <h2>⬆️ Add Money (JazzCash / Easypaisa)</h2>
-        <p className="muted mb">Verify the account title for your number first — then the secure gateway page asks for your PIN (Hunar never sees your PIN).</p>
-        <div className="row">
-          <select style={{ maxWidth: 150 }} value={topup.provider} onChange={(e) => { setTopup({ ...topup, provider: e.target.value }); setTitle(null); }}>
-            <option value="jazzcash">JazzCash</option>
-            <option value="easypaisa">Easypaisa</option>
-          </select>
-          <input style={{ maxWidth: 190 }} placeholder="Mobile number (03...)" value={topup.mobile_number}
-            onChange={(e) => { setTopup({ ...topup, mobile_number: e.target.value }); setTitle(null); }} />
-          <button className="btn secondary" onClick={checkTitle} disabled={!topup.mobile_number}>Check Name</button>
-          <input style={{ maxWidth: 130 }} type="number" placeholder="Amount" value={topup.amount}
-            onChange={(e) => setTopup({ ...topup, amount: e.target.value })} />
-          <button className="btn" onClick={startTopup} disabled={!topup.amount}>Add Money</button>
+        <p className="muted mb">Real case ki tarah: pehle number par registered <b>naam verify</b> karein, phir amount dalein — secure gateway page par PIN mangwaya jayega (Hunar kabhi PIN nahi dekhta).</p>
+
+        <label>1. Provider select karein</label>
+        <div className="provider-cards">
+          {PROVIDERS.map((p) => (
+            <button key={p.key} type="button" className={`provider-card ${p.cls} ${topup.provider === p.key ? 'active' : ''}`} onClick={() => { setTopup({ ...topup, provider: p.key }); setTitle(null); }}>
+              <b>{p.name}</b>
+              <span>{p.tag}</span>
+            </button>
+          ))}
         </div>
-        {title && (
-          title.found
-            ? <div className="alert success">✅ Account holder: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
-            : <div className="alert error">❌ <b>Not Found</b> — no JazzCash/Easypaisa account is registered on this number. Please check the number.</div>
-        )}
-        <p className="muted mt" style={{ fontSize: 12.5 }}>
-          Withdrawing funds: <b>Wallet → Withdraw</b> (on the professional wallet page) — admin approves the transfer. Booking payments are only released from escrow.
-        </p>
+
+        <div className="grid cols-2" style={{ gap: 14, marginTop: 8 }}>
+          <div>
+            <label>2. Aap ka {topup.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} number</label>
+            <div className="row">
+              <input style={{ maxWidth: 200 }} placeholder="03XXXXXXXXX" maxLength={11} value={topup.mobile_number}
+                onChange={(e) => { setTopup({ ...topup, mobile_number: e.target.value }); setTitle(null); }} />
+              <button className="btn secondary" onClick={checkTitle} disabled={checking || !topup.mobile_number}>{checking ? '⏳' : 'Check Name'}</button>
+            </div>
+            {title && (
+              title.found
+                ? <div className="alert success mt">✅ Account holder: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
+                : <div className="alert error mt">❌ <b>Not Found</b> — is number par koi {topup.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} account registered nahi. Number dobara check karein.</div>
+            )}
+          </div>
+          <div>
+            <label>3. Amount (Rs) — minimum 100</label>
+            <input type="number" placeholder="e.g. 5000" min={100} value={topup.amount} onChange={(e) => setTopup({ ...topup, amount: e.target.value })} />
+            <div className="row" style={{ marginTop: 4 }}>
+              {[1000, 2000, 5000, 10000].map((v) => (
+                <button key={v} className="btn small secondary" onClick={() => setTopup({ ...topup, amount: String(v) })}>+{v.toLocaleString()}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <button className="btn mt" onClick={startTopup} disabled={!topup.amount || (title != null && !title.found)}>🔒 Continue to Secure Checkout</button>
       </div>
 
       <StatementView
         fetcher={fetchStatement}
         title="Transaction History"
-        subtitle="Every entry shows the counterparty name, booking code and balance after. Filter by direction, type or date range — latest week loads by default."
+        subtitle="Har entry mein counterparty ka naam, booking code aur balance-after. Direction, type ya date se filter karein — default latest week."
       />
     </Layout>
   );

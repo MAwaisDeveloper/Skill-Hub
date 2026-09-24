@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
@@ -56,8 +56,18 @@ const TABS = ['overview', 'verifications', 'bookings', 'disputes', 'wallets', 't
 export default function AdminDashboard() {
   const { session } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
   const token = session?.token;
   const [tab, setTab] = useState(location.state?.tab || 'overview');
+
+  // Sidebar link (state.tab) par click → turant us tab par switch
+  useEffect(() => {
+    if (location.state?.tab) {
+      setTab(location.state.tab);
+      // state clear karo taake back/forward par dobara na chale
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state?.tab]);
   const [stats, setStats] = useState(null);
   const [queue, setQueue] = useState([]);
   const [disputes, setDisputes] = useState([]);
@@ -75,6 +85,8 @@ export default function AdminDashboard() {
   const [selectedWalletUser, setSelectedWalletUser] = useState(null);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [wdNote, setWdNote] = useState({});   // withdrawal id -> note text (inline input)
+  const [wdAction, setWdAction] = useState({}); // withdrawal id -> 'complete' | 'rejected' (confirm pending)
 
   const load = async () => {
     try {
@@ -112,11 +124,12 @@ export default function AdminDashboard() {
     } catch (e) { setError(e.message); }
   };
 
-  const resolveWithdrawal = async (id, action) => {
+  const resolveWithdrawal = async (id, action, note) => {
     try {
-      const note = action === 'rejected' ? prompt('Reject reason (user ko dikhega):') || '' : prompt('Transfer reference (optional):') || '';
       await api.post(`/admin/withdrawals/${id}/resolve`, { action, note }, token);
-      setMsg(`Withdrawal ${action}d`);
+      setMsg(action === 'complete' ? `Withdrawal completed — transfer reference: ${note || '—'}` : 'Withdrawal rejected — paisa user ke wallet mein wapas aa gaya');
+      setWdNote({ ...wdNote, [id]: undefined });
+      setWdAction({ ...wdAction, [id]: undefined });
       await load();
     } catch (e) { setError(e.message); }
   };
@@ -448,10 +461,25 @@ export default function AdminDashboard() {
                       <td><DirBadge dir={w.status === 'pending' ? 'pending' : w.status === 'completed' ? 'in' : 'out'} label={w.status} /></td>
                       <td>
                         {w.status === 'pending' && (
-                          <div className="row">
-                            <button className="btn small" onClick={() => resolveWithdrawal(w.id, 'complete')}>✔ Mark Transferred</button>
-                            <button className="btn small danger" onClick={() => resolveWithdrawal(w.id, 'rejected')}>✕ Reject (refund)</button>
-                          </div>
+                          wdAction[w.id] ? (
+                            <div className="row">
+                              <input
+                                style={{ maxWidth: 180 }}
+                                placeholder={wdAction[w.id] === 'complete' ? 'Transfer ref (e.g. TID 8829…)' : 'Reject reason (user ko dikhega)'}
+                                value={wdNote[w.id] || ''}
+                                onChange={(e) => setWdNote({ ...wdNote, [w.id]: e.target.value })}
+                                onKeyDown={(e) => e.key === 'Enter' && resolveWithdrawal(w.id, wdAction[w.id], wdNote[w.id] || '')}
+                                autoFocus
+                              />
+                              <button className="btn small" onClick={() => resolveWithdrawal(w.id, wdAction[w.id], wdNote[w.id] || '')}>Confirm</button>
+                              <button className="btn small secondary" onClick={() => setWdAction({ ...wdAction, [w.id]: undefined })}>✕</button>
+                            </div>
+                          ) : (
+                            <div className="row">
+                              <button className="btn small" onClick={() => setWdAction({ ...wdAction, [w.id]: 'complete' })}>✔ Mark Transferred</button>
+                              <button className="btn small danger" onClick={() => setWdAction({ ...wdAction, [w.id]: 'rejected' })}>✕ Reject (refund)</button>
+                            </div>
+                          )
                         )}
                         {w.admin_note && <div className="muted">{w.admin_note}</div>}
                       </td>

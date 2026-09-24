@@ -29,6 +29,31 @@ export default function CustomerOverview() {
     >
       {error && <div className="alert error">{error}</div>}
 
+      {/* New-user onboarding checklist — naya user kuch sochay bina start kar sake */}
+      {bookings.length === 0 && (
+        <div className="card onboarding">
+          <h2>🚀 Shuru karein — 3 asaan steps</h2>
+          <div className="onb-steps">
+            <div className={`onb-step ${bookings.length ? 'done' : ''}`}>
+              <span className="n">{bookings.length ? '✓' : '1'}</span>
+              <div><b>Address add karein</b><div className="muted">Profile &amp; Addresses par map pin ke sath</div></div>
+              {!bookings.length && <Link to="/customer/profile" className="btn small">Add</Link>}
+            </div>
+            <div className="onb-step">
+              <span className="n">2</span>
+              <div><b>Wallet mein paise dalein</b><div className="muted">JazzCash/Easypaisa se — 1 minute</div></div>
+              <Link to="/customer/wallet" className="btn small">Add Money</Link>
+            </div>
+            <div className="onb-step">
+              <span className="n">3</span>
+              <div><b>Service book karein</b><div className="muted">Verified professional, escrow-protected payment</div></div>
+              <Link to="/book" className="btn small gold">Book Now</Link>
+            </div>
+          </div>
+          <p className="muted mt">💡 Kaise chalta hai? <Link to="/guide">How Hunar Works</Link> — 2 minute mein samajh jayen.</p>
+        </div>
+      )}
+
       <div className="grid cols-4">
         <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Wallet Balance</span><span className="hint">available to spend</span></div>
         <div className="card stat"><span className="value">{fmt(wallet?.held_amount)}</span><span className="label">Held (Escrow)</span><span className="hint">locked for active jobs</span></div>
