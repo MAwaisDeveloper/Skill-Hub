@@ -2,6 +2,7 @@ const { pool, withTransaction } = require('../config/db');
 const { HttpError } = require('../middleware/error');
 const { lookupAccountTitle } = require('./lookup.service');
 const walletService = require('./wallet.service');
+const gatewayService = require('./gateway.service');
 const { notify } = require('../utils/helpers');
 
 // Request a withdrawal: money leaves wallet immediately (held until admin
@@ -20,13 +21,49 @@ async function requestWithdrawal(userId, role, { amount, provider, account_numbe
 
     await conn.query(`UPDATE wallets SET balance = balance - ? WHERE id = ?`, [amount, wallet.id]);
     const [after] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [wallet.id]);
-    await walletService.addLedger(conn, wallet.id, 'payout', amount, null, `Withdrawal request → ${provider} ${account_number} (${title.account_title}) — pending admin transfer`, after[0].balance);
+    // 'withdrawal' type (OUT) — pehle 'payout' likha jata tha jo IN direction hai;
+    // admin transactions mein withdrawal "Incoming" dikhti thi (audit jhooth)
+    await walletService.addLedger(conn, wallet.id, 'withdrawal', amount, null, `Withdrawal request → ${provider} ${account_number} (${title.account_title}) — pending admin transfer`, after[0].balance);
 
     const [res] = await conn.query(
       `INSERT INTO withdrawals (user_id, role, provider, account_number, account_title, amount, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
       [userId, role, provider, account_number, title.account_title, amount]
     );
-    return { withdrawal_id: res.insertId, amount, to: `${title.account_title} (${account_number})`, status: 'pending' };
+    const withdrawalId = res.insertId;
+    return { withdrawal_id: withdrawalId, amount, to: `${title.account_title} (${account_number})`, status: 'pending' };
+  });
+}
+
+// Auto-payout: the gateway disburses immediately after the request — no manual
+// admin approval needed (admins are not sitting on the site all day). The
+// adapter returns a real transaction id; failure path keeps money in the wallet.
+async function autoDisburse(withdrawalId) {
+  const [rows] = await pool.query(`SELECT * FROM withdrawals WHERE id = ?`, [withdrawalId]);
+  const wd = rows[0];
+  if (!wd || wd.status !== 'pending') return null;
+  let gw;
+  try {
+    gw = await gatewayService.disburse({
+      provider: wd.provider,
+      account_number: wd.account_number,
+      amount: Number(wd.amount),
+      reference: `WD${String(wd.id).padStart(8, '0')}`,
+    });
+  } catch (e) {
+    // Gateway unreachable: keep pending so the admin queue stays the safety net
+    await notify(wd.user_id, 'payout', `Withdrawal Rs ${wd.amount} is processing — we will notify you as soon as the transfer completes.`);
+    return { status: 'pending', reason: 'gateway_unavailable' };
+  }
+  if (!gw.success) {
+    return adminResolve(wd.id, 'reject', `Gateway declined the transfer (${gw.message || 'unknown reason'}); amount returned to wallet`);
+  }
+  const note = `Auto-paid via gateway · TID ${gw.gateway_transaction_id}`;
+  return withTransaction(async (conn) => {
+    const [again] = await conn.query(`SELECT * FROM withdrawals WHERE id = ? FOR UPDATE`, [wd.id]);
+    if (again[0].status !== 'pending') return { status: again[0].status };
+    await conn.query(`UPDATE withdrawals SET status = 'completed', processed_at = NOW(), admin_note = ? WHERE id = ?`, [note, wd.id]);
+    await notify(wd.user_id, 'payout', `Withdrawal Rs ${wd.amount} completed → ${wd.account_title} (${wd.provider} ${wd.account_number}) · TID ${gw.gateway_transaction_id}`);
+    return { status: 'completed', tid: gw.gateway_transaction_id };
   });
 }
 
@@ -64,4 +101,4 @@ async function adminResolve(id, action, adminNote) {
   });
 }
 
-module.exports = { requestWithdrawal, listMine, adminList, adminResolve };
+module.exports = { requestWithdrawal, listMine, adminList, adminResolve, autoDisburse };

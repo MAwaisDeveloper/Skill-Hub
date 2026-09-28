@@ -7,6 +7,7 @@ const chatService = require('../services/chat.service');
 const contractService = require('../services/contract.service');
 const paymentService = require('../services/payment.service');
 const notificationService = require('../services/notification.service');
+const { notify } = require('../utils/helpers');
 
 const customerOnly = [authenticate, requireRole('customer')];
 
@@ -137,6 +138,38 @@ router.get('/bookings/:id', ...customerOnly, asyncHandler(async (req, res) => {
   const booking = rows[0];
   const [events] = await pool.query(`SELECT * FROM booking_events WHERE booking_id = ? ORDER BY id ASC`, [booking.id]);
   const [myTrust] = await pool.query(`SELECT score FROM trust_scores WHERE user_id = ?`, [req.user.id]);
+
+  // Cancelled bookings: paison ka hisaab (kya kata, kya wapas aaya) — card ke liye
+  if (booking.status === 'cancelled') {
+    const [refundRows] = await pool.query(`SELECT amount, reason FROM refunds WHERE booking_id = ? ORDER BY id DESC LIMIT 1`, [booking.id]);
+    const [holdRows] = await pool.query(
+      `SELECT wt.amount FROM wallet_transactions wt JOIN wallets w ON w.id = wt.wallet_id
+       WHERE wt.related_booking_id = ? AND wt.type = 'hold' AND w.user_id = ? ORDER BY wt.id DESC LIMIT 1`,
+      [booking.id, req.user.id]
+    );
+    const [compRows] = await pool.query(`SELECT amount FROM wallet_transactions WHERE related_booking_id = ? AND type = 'compensation' LIMIT 1`, [booking.id]);
+    const [platRows] = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM commissions WHERE booking_id = ?`, [booking.id]);
+    const [cancelEvents] = await pool.query(
+      `SELECT actor_user_id, note FROM booking_events WHERE booking_id = ? AND event_type = 'cancelled' ORDER BY id DESC LIMIT 1`,
+      [booking.id]
+    );
+    const held = holdRows.length ? Number(holdRows[0].amount) : 0;
+    const refundAmount = refundRows.length ? Number(refundRows[0].amount) : 0;
+    const cutTotal = Math.round((held - refundAmount) * 100) / 100;
+    const proShare = compRows.length ? Number(compRows[0].amount) : 0;
+    const platShare = Number(platRows[0]?.total || 0);
+    booking.cancel_summary = {
+      cancelled_by: cancelEvents.length ? (cancelEvents[0].actor_user_id === req.user.id ? 'you' : 'professional') : null,
+      note: cancelEvents[0]?.note || null,
+      held_amount: held,
+      refund_amount: refundAmount,
+      refund_percent: held > 0 ? Math.round((refundAmount / held) * 100) : null,
+      refund_reason: refundRows[0]?.reason || null,
+      cut_total: cutTotal > 0 ? cutTotal : 0,
+      cut_breakdown: cutTotal > 0 && (proShare > 0 || platShare > 0) ? { professional_compensation: proShare, platform_share: platShare } : null,
+    };
+  }
+
   res.json({ ...booking, timeline: events, my_trust_score: myTrust[0]?.score ?? 100 });
 }));
 
@@ -161,6 +194,11 @@ router.post('/bookings/:id/review', ...customerOnly, asyncHandler(async (req, re
     `UPDATE service_professionals SET average_rating = (SELECT ROUND(AVG(rating), 2) FROM reviews WHERE professional_id = ?) WHERE id = ?`,
     [booking.professional_id, booking.professional_id]
   );
+  // Pro ko in-app notification (notify() ko users.id chahiye, service_professionals.id nahi)
+  const [proUser] = await pool.query(`SELECT user_id FROM service_professionals WHERE id = ?`, [booking.professional_id]);
+  if (proUser[0]) {
+    await notify(proUser[0].user_id, 'review', `Customer ne booking ${booking.booking_code} par ${rating}-star review diya${comment ? ' — comment parhen' : ''}`, bookingId);
+  }
   res.json({ ok: true });
 }));
 
@@ -192,8 +230,11 @@ router.get('/wallet/statement', ...customerOnly, asyncHandler(async (req, res) =
 
 // Customer withdrawal: wallet -> JazzCash/Easypaisa (admin approves transfer)
 router.post('/wallet/withdraw', ...customerOnly, asyncHandler(async (req, res) => {
-  const { requestWithdrawal } = require('../services/withdrawal.service');
-  res.json(await requestWithdrawal(req.user.id, 'customer', req.body));
+  const wdService = require('../services/withdrawal.service');
+  const result = await wdService.requestWithdrawal(req.user.id, 'customer', req.body);
+  await wdService.autoDisburse(result.withdrawal_id); // gateway auto-payout — no manual approval
+  const [fresh] = await pool.query(`SELECT status FROM withdrawals WHERE id = ?`, [result.withdrawal_id]);
+  res.json({ ...result, status: fresh[0]?.status || result.status });
 }));
 
 router.get('/wallet/withdrawals', ...customerOnly, asyncHandler(async (req, res) => {

@@ -49,16 +49,16 @@ export default function ProContracts() {
     <Layout title="Contract Marketplace" subtitle="Bulk hiring requests matching your categories — submit your quote">
       <div className="card">
         <h2>How contracts pay</h2>
-        <p className="muted">Customer selects your bid → 40% deposit escrow mein lock → baqi milestones par release. Total contract value par 10% commission lagti hai.</p>
+        <p className="muted">Customer selects your bid → 40% deposit escrow mein lock → baqi milestones par release. Total contract value par 0% service charges (free launch offer) lagti hai.</p>
       </div>
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
         <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} style={{ width: 'auto', margin: 0 }} />
-        Sab categories ke open contracts bhi dikhaao (browse-only — bid sirf matching category par)
+        Sab categories ke open contracts bhi dikhaao (browse-only: bid sirf matching category par)
       </label>
-      {contracts.length === 0 && <div className="card"><Empty icon="📑">No open contracts right now — check back soon.</Empty></div>}
+      {contracts.length === 0 && <div className="card"><Empty icon="📑">No open contracts right now: check back soon.</Empty></div>}
       {contracts.map((c) => (
         <div className="card" key={c.id}>
           <div className="row spread">
@@ -92,11 +92,11 @@ export default function ProContracts() {
                   </tbody>
                 </table>
               )}
-              <p className="muted mt" style={{ fontSize: 13 }}>Customer milestone confirm karega tabhi aap ke wallet mein payout aayegi (10% commission ke baad 90%).</p>
+              <p className="muted mt" style={{ fontSize: 13 }}>The payout lands in your wallet once the customer confirms the milestone (90% after the 10% platform commission).</p>
             </div>
           )}
           {!c.my_bid_status && !c.matches_me && (
-            <div className="alert warn">This contract is outside your category — browse only.</div>
+            <div className="alert warn">This contract is outside your category: browse only.</div>
           )}
           {!c.my_bid_status && c.matches_me !== 0 && (
             <div className="row">

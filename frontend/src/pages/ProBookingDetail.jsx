@@ -5,6 +5,10 @@ import { useApp } from '../context';
 import Layout from '../components/Layout';
 import { StatusBadge, CancelPreviewModal, DirBadge, Amt } from '../components/ui';
 import LiveMap from '../components/LiveMap';
+import { ProIdentityCard } from './ProfessionalOverview';
+
+// "Kaam KARWAYE wala = Customer, kaam KARNE wala = Professional" — booking header
+// dono identities dikhati hai: customer (name+phone) + professional (name+photo+phone)
 
 export default function ProBookingDetail() {
   const { id } = useParams();
@@ -20,9 +24,10 @@ export default function ProBookingDetail() {
   const [lateForm, setLateForm] = useState({ reason: '', new_eta_minutes: '' });
   const [showLate, setShowLate] = useState(false);
 
-  // Chat auto-refresh (5s) jab tak booking active hai
+  // Chat auto-refresh (5s) jab tak booking active hai — booking load na ho (session
+  // mismatch/403) to poll NAHI chalate, warna page 'Loading…' par atakta lagta hai
   useEffect(() => {
-    if (!['completed', 'cancelled', 'refunded', 'disputed'].includes(booking?.status)) {
+    if (booking && !['completed', 'cancelled', 'refunded', 'disputed'].includes(booking.status)) {
       const t = setInterval(() => {
         api.get(`/professional/bookings/${id}/messages`, token).then(setMessages).catch(() => {});
       }, 5000);
@@ -117,6 +122,9 @@ export default function ProBookingDetail() {
   return (
     <Layout title={`Job ${booking.booking_code}`} subtitle={`${booking.category_name} · ${booking.customer_name} · ${fmt(booking.final_price)} (you earn ${fmt(Number(booking.final_price) * 0.9)})`} actions={<StatusBadge status={booking.status} />}>
       {msg && <div className="alert warn">{msg}</div>}
+
+      <ProIdentityCard profile={{ full_name: booking.customer_name, profile_photo: booking.customer_photo, trust_score: booking.customer_trust_score }} phone={booking.customer_phone} />
+      <p className="muted" style={{ marginTop: -10, marginBottom: 12, fontSize: 12.5 }}>↑ Kaam <b>karwaye wala = Customer</b> ({booking.customer_name}) · Aap professional hain — is kaam ko aap karenge.</p>
       {error && <div className="alert error">{error}</div>}
 
       <div className="grid cols-2">
@@ -132,7 +140,7 @@ export default function ProBookingDetail() {
           {/* Accept with arrival promise */}
           {booking.status === 'waiting_for_professional' && booking.offer_status !== 'pending' && (
             <div className="mt">
-              <label>Promise an ETA on accept — how many minutes until you arrive?</label>
+              <label>Promise an ETA on accept: how many minutes until you arrive?</label>
               <input type="number" value={offerForm.arrival_minutes} onChange={(e) => setOfferForm({ ...offerForm, arrival_minutes: e.target.value })} placeholder="e.g. 45" style={{ maxWidth: 140 }} />
               <button className="btn" onClick={() => actAccept()}>✓ Accept Job (with ETA)</button>
             </div>
@@ -154,7 +162,7 @@ export default function ProBookingDetail() {
           {booking.offer_status === 'pending' && (
             <div className="alert warn mt">⏳ Aap ka offer Rs {Number(booking.offered_price).toLocaleString()} customer ke pass pending hai…</div>
           )}
-          {booking.offer_status === 'accepted' && <div className="alert success mt">✓ Offer accepted — deal Rs {Number(booking.final_price).toLocaleString()} par finalize</div>}
+          {booking.offer_status === 'accepted' && <div className="alert success mt">✓ Offer accepted: deal Rs {Number(booking.final_price).toLocaleString()} par finalize</div>}
 
           {/* Late notify */}
           {['accepted', 'on_the_way'].includes(booking.status) && (
@@ -162,7 +170,7 @@ export default function ProBookingDetail() {
               {!booking.late_notified ? (
                 <>
                   {!showLate ? (
-                    <button className="btn secondary small" onClick={() => setShowLate(true)}>⏰ Late Ho Raha Hoon — Customer Ko Batao</button>
+                    <button className="btn secondary small" onClick={() => setShowLate(true)}>⏰ Late Ho Raha Hoon: Customer Ko Batao</button>
                   ) : (
                     <>
                       <input placeholder="Reason (e.g. traffic, previous job lamba chala)" value={lateForm.reason} onChange={(e) => setLateForm({ ...lateForm, reason: e.target.value })} />

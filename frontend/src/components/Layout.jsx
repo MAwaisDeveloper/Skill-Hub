@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context';
 import { api } from '../api';
 
@@ -44,19 +44,19 @@ const MENUS = {
   ],
   admin: [
     { to: '/admin', label: 'Dashboard', ico: '⌂' },
-    { to: '/admin', label: 'Verifications', ico: '✅', tab: 'verifications' },
-    { to: '/admin', label: 'Bookings', ico: '🗂', tab: 'bookings' },
-    { to: '/admin', label: 'Disputes', ico: '⚖', tab: 'disputes' },
-    { to: '/admin', label: 'Wallets', ico: '👛', tab: 'wallets' },
-    { to: '/admin', label: 'Transactions', ico: '💳', tab: 'transactions' },
-    { to: '/admin', label: 'Top-ups', ico: '⬆', tab: 'topups' },
-    { to: '/admin', label: 'Withdrawals', ico: '💸', tab: 'payouts' },
-    { to: '/admin', label: 'Penalties', ico: '⚠', tab: 'penalties' },
-    { to: '/admin', label: 'Refunds', ico: '↩', tab: 'refunds' },
-    { to: '/admin', label: 'Messages', ico: '💬', tab: 'messages' },
-    { to: '/admin', label: 'Users', ico: '👥', tab: 'users' },
-    { to: '/admin', label: 'Reports', ico: '📈', tab: 'reports' },
-    { to: '/admin', label: 'Platform Settings', ico: '⚙', tab: 'settings' },
+    { to: '/admin?tab=verifications', label: 'Verifications', ico: '✅' },
+    { to: '/admin?tab=bookings', label: 'Bookings', ico: '🗂' },
+    { to: '/admin?tab=disputes', label: 'Disputes', ico: '⚖' },
+    { to: '/admin?tab=wallets', label: 'Wallets', ico: '👛' },
+    { to: '/admin?tab=transactions', label: 'Transactions', ico: '💳' },
+    { to: '/admin?tab=topups', label: 'Top-ups', ico: '⬆' },
+    { to: '/admin?tab=payouts', label: 'Withdrawals', ico: '💸' },
+    { to: '/admin?tab=penalties', label: 'Penalties', ico: '⚠' },
+    { to: '/admin?tab=refunds', label: 'Refunds', ico: '↩' },
+    { to: '/admin?tab=messages', label: 'Messages', ico: '💬' },
+    { to: '/admin?tab=users', label: 'Users', ico: '👥' },
+    { to: '/admin?tab=reports', label: 'Reports', ico: '📈' },
+    { to: '/admin?tab=settings', label: 'Platform Rules', ico: '⚙' },
     { to: '/settings', label: 'My Profile & Password', ico: '🔧' },
   ],
 };
@@ -87,31 +87,67 @@ function SideGroup({ item, onNavigate }) {
 export default function Layout({ children, title, subtitle, actions }) {
   const { session, logout } = useApp();
   const navigate = useNavigate();
+  const loc = useLocation();
+  // Collapsible sidebar: desktop par hide/show toggle, state saved across pages
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('hunar_sidebar_collapsed') === '1');
+  // Query-param links (/admin?tab=x) ko exact match karna hoga: NavLink sirf path dekhta hai
+  const isActiveLink = (to) => {
+    const [path, query] = to.split('?');
+    if (loc.pathname !== path) return false;
+    if (query) return loc.search === `?${query}`;
+    return loc.search === ''; // plain link (e.g. Dashboard) sirf tab-query ke bina active
+  };
   const role = session?.user?.role || 'customer';
   const menu = MENUS[role] || [];
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifItems, setNotifItems] = useState([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const notifTimer = React.useRef(null);
 
   useEffect(() => {
     if (!session?.token) return;
     const endpoints = {
-      customer: '/customer/notifications?unread_only=1',
-      professional: '/professional/notifications?unread_only=1',
+      customer: '/customer/notifications',
+      professional: '/professional/notifications',
+      admin: '/admin/notifications',
     };
     const ep = endpoints[role];
     if (!ep) return;
-    const fetchUnread = () => api.get(ep, session.token).then((rows) => setUnread(Array.isArray(rows) ? rows.length : 0)).catch(() => {});
-    fetchUnread();
-    const t = setInterval(fetchUnread, 15000);
+    const fetchNotifs = () => api.get(ep, session.token).then((rows) => {
+      const list = Array.isArray(rows) ? rows : rows.rows || [];
+      setNotifItems(list.slice(0, 4));
+      setUnread(list.filter((n) => !n.read_status).length);
+    }).catch(() => {});
+    fetchNotifs();
+    const t = setInterval(fetchNotifs, 15000);
     return () => clearInterval(t);
   }, [session, role]);
 
+  // Close profile dropdown on outside click / route change
+  useEffect(() => {
+    if (!profileOpen) return;
+    const close = () => setProfileOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [profileOpen]);
+  useEffect(() => { setProfileOpen(false); setNotifOpen(false); }, [loc.pathname, loc.search]);
+
   const name = session?.profile?.full_name || session?.user?.phone || 'User';
-  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();  const toggleSidebar = () => {
+    setCollapsed((c) => {
+      localStorage.setItem('hunar_sidebar_collapsed', c ? '0' : '1');
+      return !c;
+    });
+  };
 
   const sidebar = (
-    <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-      <div className="side-label">{role === 'admin' ? 'Administration' : role === 'professional' ? 'Professional Panel' : 'Customer Panel'}</div>
+    <aside className={`sidebar ${menuOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <button type="button" className="side-collapse" onClick={toggleSidebar} title={collapsed ? 'Show sidebar' : 'Hide sidebar'} aria-label={collapsed ? 'Show sidebar' : 'Hide sidebar'}>
+        {collapsed ? '»' : '«'}
+      </button>
+      <div className="side-label">{role === 'admin' ? 'Administration' : role === 'professional' ? 'Service Provider Panel' : 'Customer Panel'}</div>
       {menu.map((m) =>
         m.children ? (
           <SideGroup key={m.label} item={m} onNavigate={() => setMenuOpen(false)} />
@@ -119,17 +155,15 @@ export default function Layout({ children, title, subtitle, actions }) {
           <NavLink
             key={m.to + m.label}
             to={m.to}
-            state={m.tab ? { tab: m.tab } : undefined}
-            className={({ isActive }) => `side-link ${isActive && !m.tab ? 'active' : ''}`}
+            className={() => `side-link ${isActiveLink(m.to) ? 'active' : ''}`}
             onClick={() => setMenuOpen(false)}
+            title={m.label}
           >
-            <span className="ico">{m.ico}</span> {m.label}
+            <span className="ico">{m.ico}</span> <span className="side-text">{m.label}</span>
           </NavLink>
         )
       )}
-      <div className="side-footer">
-        Hunar Platform v2.0<br />Verified Skill, Trusted Service
-      </div>
+      <div className="side-footer" />
     </aside>
   );
 
@@ -143,15 +177,71 @@ export default function Layout({ children, title, subtitle, actions }) {
           </NavLink>
         </div>
         <div className="topbar-right">
-          <button className="bell" title="Notifications" onClick={() => navigate(role === 'professional' ? '/professional/notifications' : role === 'admin' ? '/admin' : '/customer/notifications')}>
-            🔔{unread > 0 && <span className="dot">{unread}</span>}
-          </button>
-          <div className="who">
-            <div className="name">{name}</div>
-            <div className="role">{role === 'professional' ? 'Service Professional' : role}</div>
+          {/* Notifications bell — hover par latest 4 ka dropdown, click par full page */}
+          <div
+            className="top-dd"
+            onMouseEnter={() => { clearTimeout(notifTimer.current); setNotifOpen(true); }}
+            onMouseLeave={() => { notifTimer.current = setTimeout(() => setNotifOpen(false), 180); }}
+          >
+            <button
+              className="bell"
+              title="Notifications"
+              onClick={() => navigate(role === 'professional' ? '/professional/notifications' : role === 'admin' ? '/admin?tab=messages' : '/customer/notifications')}
+            >
+              🔔{unread > 0 && <span className="dot">{unread > 99 ? '99+' : unread}</span>}
+            </button>
+            {notifOpen && (
+              <div className="top-dd-panel" role="menu" aria-label="Latest notifications">
+                <div className="dd-head">Notifications {unread > 0 && <span className="dd-count">{unread} new</span>}</div>
+                {notifItems.length === 0 && <div className="dd-empty">You're all caught up: no notifications yet.</div>}
+                {notifItems.map((n) => (
+                  <div key={n.id} className={`dd-item ${n.read_status ? '' : 'unread'}`}>
+                    <span className="dd-ico">{{ booking: '🗂', wallet: '👛', payout: '💸', review: '★', dispute: '⚖', chat: '💬', contract: '📑', verification: '✅' }[n.type] || '🔔'}</span>
+                    <span className="dd-body">
+                      <span className="dd-msg">{n.message?.slice(0, 76)}{n.message?.length > 76 ? '…' : ''}</span>
+                      <span className="dd-time">{String(n.created_at || '').slice(0, 16)}</span>
+                    </span>
+                  </div>
+                ))}
+                <button
+                  className="dd-viewall"
+                  onClick={() => navigate(role === 'professional' ? '/professional/notifications' : role === 'admin' ? '/admin?tab=messages' : '/customer/notifications')}
+                >View all notifications →</button>
+              </div>
+            )}
           </div>
-          <div className="avatar">{initials}</div>
-          <button className="btn small secondary" onClick={() => { logout(); navigate('/login'); }}>Logout</button>
+          {/* Profile avatar dropdown — click par open (example jaisa) */}
+          <div className="top-dd" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" className="avatar-btn" onClick={(e) => { e.stopPropagation(); setProfileOpen(!profileOpen); }} aria-label="Account menu">
+              <div className="avatar">{initials}</div>
+              <span className="avatar-caret">▾</span>
+            </button>
+            <div className="who">
+              <div className="name">{name}</div>
+              <div className="role">{role === 'professional' ? 'Professional' : role === 'admin' ? 'Administrator' : 'Customer'}</div>
+            </div>
+            {profileOpen && (
+              <div className="top-dd-panel profile-dd" onClick={(e) => e.stopPropagation()}>
+                <div className="dd-head dd-user"><b>{name}</b><span>{session?.user?.phone}</span></div>
+                <button className="dd-item dd-link" onClick={() => { setProfileOpen(false); navigate('/settings'); }}>
+                  <span className="dd-ico">👤</span><span className="dd-body">My Profile & Settings</span>
+                </button>
+                {role === 'customer' && (
+                  <button className="dd-item dd-link" onClick={() => { setProfileOpen(false); navigate('/customer/profile'); }}>
+                    <span className="dd-ico">📍</span><span className="dd-body">Profile & Addresses</span>
+                  </button>
+                )}
+                {role === 'professional' && (
+                  <button className="dd-item dd-link" onClick={() => { setProfileOpen(false); navigate('/professional/profile'); }}>
+                    <span className="dd-ico">✅</span><span className="dd-body">Profile & Verification</span>
+                  </button>
+                )}
+                <button className="dd-item dd-link dd-danger" onClick={() => { logout(); navigate('/login'); }}>
+                  <span className="dd-ico">⏻</span><span className="dd-body">Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -173,8 +263,8 @@ export default function Layout({ children, title, subtitle, actions }) {
       </div>
 
       <footer className="footer">
-        <span><b>Hunar</b> — Booking-to-payout marketplace for home services & skilled trades, Lahore</span>
-        <span><a href="/privacy" style={{ color: '#b9cfc3' }}>Privacy Policy</a> · Escrow-protected payments · 10% commission · Manual CNIC verification</span>
+        <span><b>Hunar</b> · Verified services, secure payments</span>
+        <span><a href="/privacy" style={{ color: '#b9cfc3' }}>Privacy Policy</a> · Escrow-protected payments · Manual CNIC verification</span>
       </footer>
     </div>
   );

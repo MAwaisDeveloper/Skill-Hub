@@ -68,13 +68,13 @@ export default function ProWallet() {
 
       <div className="grid cols-3">
         <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Available Balance</span></div>
-        <div className="card stat"><span className="value">{fmt(profile?.payout_account || '—')}</span><span className="label">Payout Account</span><span className="hint">{profile?.payout_provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} · profile se change karein</span></div>
+        <div className="card stat"><span className="value">{fmt(profile?.payout_account || '—')}</span><span className="label">Payout Account</span><span className="hint">{profile?.payout_provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} · change it from your profile page</span></div>
         <div className="card stat"><span className="value">{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">active bookings ke against (info)</span></div>
       </div>
 
       <div className="card">
         <h2>💸 Withdraw from Wallet</h2>
-        <p className="muted mb">Provider + number → <b>naam verify</b> (registered holder dikhega, ya Not Found) → amount → request → admin transfer karega.</p>
+        <p className="muted mb">Choose provider + number → <b>verify the account title</b> (shows the registered holder, or Not Found) → enter amount → request → the platform transfers the funds.</p>
         <div className="provider-cards">
           {[{ key: 'jazzcash', name: 'JazzCash', cls: 'prov-jazzcash', tag: 'Instant transfer' }, { key: 'easypaisa', name: 'Easypaisa', cls: 'prov-easypaisa', tag: 'Instant transfer' }].map((p) => (
             <button key={p.key} type="button" className={`provider-card ${p.cls} ${wd.provider === p.key ? 'active' : ''}`} onClick={() => { setWd({ ...wd, provider: p.key }); setTitle(null); }}>
@@ -94,7 +94,7 @@ export default function ProWallet() {
             {title && (
               title.found
                 ? <div className="alert success mt">✅ Account title: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
-                : <div className="alert error mt">❌ <b>Not Found</b> — is number par registered account nahi. Number check karein.</div>
+                : <div className="alert error mt">❌ <b>Not Found</b> — no account registered on this number. Please double-check.</div>
             )}
           </div>
           <div>
@@ -138,8 +138,8 @@ export default function ProWallet() {
 
         <div className="card">
           <h2>Penalties (owed / settled)</h2>
-          <p className="muted mb">Not customer cancellations — a penalty is recorded when <b>you cancel</b> an accepted job (10%). It is auto-deducted from your next payout.</p>
-          {penalties.length === 0 && <Empty icon="🛡️">No penalties — clean record!</Empty>}
+          <p className="muted mb">Not customer cancellations: a penalty is recorded when <b>you cancel</b> an accepted job (10%). It is auto-deducted from your next payout.</p>
+          {penalties.length === 0 && <Empty icon="🛡️">No penalties: clean record!</Empty>}
           {penalties.length > 0 && (
             <table>
               <thead><tr><th>Date</th><th>Booking</th><th>Reason</th><th>Amount</th><th>Status</th><th></th></tr></thead>

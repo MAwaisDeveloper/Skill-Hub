@@ -83,7 +83,7 @@ export default function MapPicker({ lat, lng, onChange, height = 280 }) {
         <div ref={divRef} style={{ height: '100%', width: '100%' }} />
       </div>
       <p className="muted">
-Click on the map to drop the exact location pin (you can drag it too). Free OpenStreetMap — no API cost.
+Click on the map to drop the exact location pin (you can drag it too). Free OpenStreetMap: no API cost.
         {lat != null && <b> Selected: {lat}, {lng}</b>}
       </p>
     </div>

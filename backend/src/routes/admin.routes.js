@@ -13,7 +13,7 @@ router.get('/dashboard', ...adminOnly, asyncHandler(async (req, res) => {
        (SELECT COUNT(*) FROM service_professionals WHERE verification_status = 'pending') AS pending_verifications,
        (SELECT COUNT(*) FROM bookings WHERE status IN ('waiting_for_professional','accepted','on_the_way','arrived','work_started','work_completed')) AS active_bookings,
        (SELECT COUNT(*) FROM disputes WHERE status = 'open') AS open_disputes,
-       (SELECT COALESCE(SUM(amount),0) FROM commissions) AS total_commission,
+       (SELECT COALESCE(SUM(amount),0) FROM commissions WHERE percentage > 0) AS total_commission,
        (SELECT COUNT(*) FROM users WHERE role = 'customer') AS total_customers,
        (SELECT COUNT(*) FROM users WHERE role = 'professional') AS total_professionals`
   );
@@ -45,6 +45,12 @@ router.get('/disputes', ...adminOnly, asyncHandler(async (req, res) => {
     `SELECT d.*, b.booking_code, b.final_price, b.status AS booking_status
      FROM disputes d JOIN bookings b ON b.id = d.booking_id ORDER BY d.created_at DESC`
   );
+  res.json(rows);
+}));
+
+// Admin ki apni notifications (header bell ke liye)
+router.get('/notifications', ...adminOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(`SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 30`, [req.user.id]);
   res.json(rows);
 }));
 
@@ -82,15 +88,18 @@ router.post('/disputes/:id/resolve', ...adminOnly, asyncHandler(async (req, res)
       await walletService.releaseForBooking(conn, booking.id, 'dispute_resolved_pro');
     } else {
       // split: commission on full, half back to customer, half (minus commission) to pro
+      // FIX: customer ka POORA escrow release hota hai (amount, sirf amount/2 nahi) —
+      // warna aadha paisa held_amount mein stuck reh jata tha. Pro ka held touch nahi
+      // karte (pro ka koi escrow nahi hota — paisa customer ke wallet mein held tha).
       const commission = Math.round(amount * (commissionPercent / 100) * 100) / 100;
       const half = Math.round((amount - commission) / 2 * 100) / 100;
       await conn.query(`INSERT INTO commissions (booking_id, amount, percentage) VALUES (?, ?, ?)`, [booking.id, commission, commissionPercent]);
       const custWallet = await walletService.getWalletForUpdate(conn, customerUserId);
-      await conn.query(`UPDATE wallets SET held_amount = GREATEST(0, held_amount - ?), balance = balance + ? WHERE id = ?`, [amount / 2, half, custWallet.id]);
+      await conn.query(`UPDATE wallets SET held_amount = GREATEST(0, held_amount - ?), balance = balance + ? WHERE id = ?`, [amount, half, custWallet.id]);
       const [cw] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [custWallet.id]);
       await walletService.addLedger(conn, custWallet.id, 'refund', half, booking.id, 'Dispute split - customer share', cw[0].balance);
       const proWallet = await walletService.getWalletForUpdate(conn, proUserId);
-      await conn.query(`UPDATE wallets SET held_amount = GREATEST(0, held_amount - ?), balance = balance + ? WHERE id = ?`, [amount / 2, half, proWallet.id]);
+      await conn.query(`UPDATE wallets SET balance = balance + ? WHERE id = ?`, [half, proWallet.id]);
       const [pw] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [proWallet.id]);
       await walletService.addLedger(conn, proWallet.id, 'payout', half, booking.id, 'Dispute split - professional share', pw[0].balance);
       await conn.query(`UPDATE bookings SET status = 'completed' WHERE id = ?`, [booking.id]);
@@ -102,8 +111,8 @@ router.post('/disputes/:id/resolve', ...adminOnly, asyncHandler(async (req, res)
       req.user.id,
       dispute.id,
     ]);
-    await notify(customerUserId, 'dispute', `Dispute on booking ${booking.booking_code} resolved (${outcome})`, booking.id);
-    await notify(proUserId, 'dispute', `Dispute on booking ${booking.booking_code} resolved (${outcome})`, booking.id);
+    await notify(customerUserId, 'dispute', `Dispute on booking ${booking.booking_code} resolved (${outcome})${admin_note ? ` — ${admin_note}` : ''}`, booking.id);
+    await notify(proUserId, 'dispute', `Dispute on booking ${booking.booking_code} resolved (${outcome})${admin_note ? ` — ${admin_note}` : ''}`, booking.id);
   });
   res.json({ resolved: true });
 }));
@@ -208,9 +217,13 @@ router.post('/withdrawals/:id/resolve', ...adminOnly, asyncHandler(async (req, r
 
 // ---- Reports ----
 router.get('/reports/commissions', ...adminOnly, asyncHandler(async (req, res) => {
+  // Sirf ASLI platform commission (release/dispute-split, percentage > 0) — cancellation
+  // platform-share rows percentage 0.00 ke sath yahan hoti hain lekin wo "commission report"
+  // ki deals ko ghalat badhati thin (audit fix)
   const [rows] = await pool.query(
     `SELECT DATE(calculated_at) AS day, COUNT(*) AS deals, SUM(amount) AS commission
-     FROM commissions GROUP BY DATE(calculated_at) ORDER BY day DESC LIMIT 60`
+     FROM commissions WHERE percentage > 0
+     GROUP BY DATE(calculated_at) ORDER BY day DESC LIMIT 60`
   );
   res.json(rows);
 }));
@@ -279,8 +292,8 @@ router.get('/wallet-transactions', ...adminOnly, asyncHandler(async (req, res) =
   const params = [];
   if (req.query.user_id) { where.push('w.user_id = ?'); params.push(Number(req.query.user_id)); }
   if (req.query.type) { where.push('t.type = ?'); params.push(req.query.type); }
-  if (req.query.direction === 'in') where.push(`t.type IN ('topup','refund','payout')`);
-  if (req.query.direction === 'out') where.push(`t.type IN ('hold','release','penalty','commission')`);
+  if (req.query.direction === 'in') where.push(`t.type IN ('topup','refund','payout','compensation')`);
+  if (req.query.direction === 'out') where.push(`t.type IN ('hold','release','penalty','commission','withdrawal')`);
   if (req.query.from) { where.push('DATE(t.created_at) >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('DATE(t.created_at) <= ?'); params.push(req.query.to); }
   const baseSql = `FROM wallet_transactions t

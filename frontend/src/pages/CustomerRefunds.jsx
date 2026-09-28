@@ -17,10 +17,10 @@ export default function CustomerRefunds() {
   }, []);
 
   return (
-    <Layout title="My Refunds" subtitle="Cancellation aur dispute se wapas mile paise — sab yahan">
+    <Layout title="My Refunds" subtitle="Every amount returned to you from cancellations and disputes">
       {error && <div className="alert error">{error}</div>}
       <div className="card">
-        {refunds.length === 0 && <Empty icon="↩">Koi refund record nahi. Booking cancel hoti hai to refund yahan show hoga.</Empty>}
+        {refunds.length === 0 && <Empty icon="↩">No refund records yet. If you cancel a booking, the refund will appear here.</Empty>}
         {refunds.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>Booking</th><th>Amount</th><th>Reason / Rule</th><th>Status</th></tr></thead>
@@ -39,12 +39,12 @@ export default function CustomerRefunds() {
         )}
       </div>
       <div className="card">
-        <h2>📋 Refund rules (yaad rakhein)</h2>
+        <h2>📋 Refund rules (good to know)</h2>
         <ul style={{ paddingLeft: 18, lineHeight: 1.9 }}>
-          <li>Professional ne accept <b>nahi</b> kiya tha → <b>100% refund</b> turant wallet mein</li>
-          <li>Professional accept kar chuka tha → <b>85% refund</b> (15% cut: 10% professional compensation + 5% platform)</li>
-          <li>Professional ne cancel kiya → <b>100% refund</b> + us par 10% penalty (agli payout se auto-cut)</li>
-          <li>Dispute → paise escrow mein held rehte hain jab tak admin decide na kare</li>
+          <li>Provider had <b>not</b> accepted yet → <b>100% refund</b>, instantly to your wallet</li>
+          <li>Provider had already accepted → <b>85% refund</b> (15% cancellation cut: 10% provider compensation + 5% platform)</li>
+          <li>Provider cancelled → <b>100% refund</b> + a 10% penalty is charged to the provider (auto-deducted from their next payout)</li>
+          <li>Dispute → funds stay safely in escrow until an administrator decides the case</li>
         </ul>
       </div>
     </Layout>

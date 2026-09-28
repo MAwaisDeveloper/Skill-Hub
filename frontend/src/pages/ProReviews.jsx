@@ -23,7 +23,7 @@ export default function ProReviews() {
   const avg = reviews.length ? (reviews.reduce((a, r) => a + Number(r.rating), 0) / reviews.length).toFixed(1) : null;
 
   return (
-    <Layout title="Reviews Received" subtitle="Customers ne aap ki service kaisi lagi — har rating aap ki profile par show hoti hai">
+    <Layout title="Reviews Received" subtitle="What customers thought of your service — every rating shows on your profile">
       {error && <div className="alert error">{error}</div>}
 
       {reviews.length > 0 && (
@@ -35,7 +35,7 @@ export default function ProReviews() {
       )}
 
       <div className="card">
-        {reviews.length === 0 && <Empty icon="★">Abhi koi review nahi aayi. Jobs complete karein — customers khud rate karenge.</Empty>}
+        {reviews.length === 0 && <Empty icon="★">Abhi koi review nahi aayi. Jobs complete karein: customers khud rate karenge.</Empty>}
         {reviews.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>Booking</th><th>Rating</th><th>Comment</th></tr></thead>

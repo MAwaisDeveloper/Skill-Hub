@@ -33,7 +33,7 @@ export default function ProJobs() {
         <>
           <button className="btn small" onClick={() => act(b.id, 'accept')}>✔ Accept Job</button>
           <button className="btn small danger" onClick={() => {
-            const reason = prompt('Reject reason (customer ko dikhega, min 10 chars):');
+            const reason = prompt('Reject reason (shown to the customer, min 10 characters):');
             if (reason) act(b.id, 'reject', { reason });
           }}>✕ Reject (with reason)</button>
         </>
@@ -52,7 +52,7 @@ export default function ProJobs() {
       case 'arrived': return 'Customer will give you a 6-digit OTP — work starts after they confirm it.';
       case 'work_started': return 'Finish the job, then mark complete.';
       case 'work_completed': return 'Payment releases when customer confirms — or automatically in 24h.';
-      case 'completed': return 'Payout added to your wallet (minus 10% commission).';
+      case 'completed': return 'Payout added to your wallet (minus 0% service charges (free launch offer)).';
       default: return '';
     }
   };

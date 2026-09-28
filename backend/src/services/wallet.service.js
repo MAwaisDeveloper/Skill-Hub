@@ -60,6 +60,7 @@ async function getTransactions(userId) {
               WHEN t.type IN ('hold','refund') THEN 'Service Professional'
               WHEN t.type = 'payout' THEN 'Customer'
               WHEN t.type = 'topup' THEN 'JazzCash/Easypaisa Top-up'
+              WHEN t.type = 'compensation' THEN 'Customer cancellation compensation'
               WHEN t.type = 'commission' THEN 'Platform'
               WHEN t.type = 'penalty' THEN 'Platform (Penalty)'
               ELSE 'Platform'
@@ -194,7 +195,7 @@ async function releaseForBooking(conn, bookingId, trigger = 'customer_confirm') 
   // ledger note carries professional name so "kis ke naam se gaya" is visible
   const [proNameRows] = await conn.query(`SELECT full_name FROM service_professionals WHERE id = ?`, [booking.professional_id]);
   const proName = proNameRows.length ? proNameRows[0].full_name : 'professional';
-  await addLedger(conn, custWallet.id, 'release', amount, bookingId, `Payment released to ${proName} (commission ${commissionPercent}% deducted)`, custWallet.balance);
+  await addLedger(conn, custWallet.id, 'release', amount, bookingId, `Payment released to ${proName} (service charges ${commissionPercent}% deducted)`, custWallet.balance);
 
   // 3) Professional payout (wallet credit after penalty deduction)
   const [proRows] = await conn.query(
@@ -233,7 +234,7 @@ async function releaseForBooking(conn, bookingId, trigger = 'customer_confirm') 
   await conn.query(`UPDATE wallets SET balance = balance + ? WHERE id = ?`, [netPro, proWallet.id]);
   const [proAfter] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [proWallet.id]);
 
-  await addLedger(conn, proWallet.id, 'payout', netPro, bookingId, `Job payout (Rs ${amount} - ${commissionPercent}% commission - penalties)`, proAfter[0].balance);
+  await addLedger(conn, proWallet.id, 'payout', netPro, bookingId, `Job payout (Rs ${amount} - ${commissionPercent}% service charges - penalties)`, proAfter[0].balance);
 
   await conn.query(`INSERT INTO payouts (professional_id, booking_id, amount, status, released_at) VALUES (?, ?, ?, 'released', NOW())`, [
     booking.professional_id,
@@ -244,7 +245,7 @@ async function releaseForBooking(conn, bookingId, trigger = 'customer_confirm') 
   await conn.query(`UPDATE bookings SET status = 'completed', completed_at = NOW() WHERE id = ?`, [bookingId]);
   await conn.query(
     `INSERT INTO booking_events (booking_id, event_type, note) VALUES (?, 'payment_released', ?)`,
-    [bookingId, `Released Rs ${netPro} to professional; commission Rs ${commissionAmount} (${trigger})`]
+    [bookingId, `Released Rs ${netPro} to professional; service charges Rs ${commissionAmount} (${trigger})`]
   );
 
   await notifyHelper(proUserId, 'payout', `Payment Rs ${netPro} released for booking ${booking.booking_code}`, bookingId, null, conn);
@@ -258,7 +259,7 @@ async function releaseForBooking(conn, bookingId, trigger = 'customer_confirm') 
 // Direction per transaction type, from the wallet owner's perspective:
 //  in  = paisa AYA   (topup, refund, payout credit, cancellation compensation)
 //  out = paisa GAYA  (hold, release, penalty, commission-cut, withdrawal)
-const IN_TYPES = ['topup', 'refund', 'payout'];
+const IN_TYPES = ['topup', 'refund', 'payout', 'compensation'];
 const OUT_TYPES = ['hold', 'release', 'penalty', 'commission', 'withdrawal'];
 
 async function getStatement(userId, opts = {}) {
@@ -275,8 +276,8 @@ async function getStatement(userId, opts = {}) {
   const where = ['t.wallet_id = ?'];
   const params = [wallet.id];
   if (type) { where.push('t.type = ?'); params.push(type); }
-  if (direction === 'in') where.push(`t.type IN ('topup','refund','payout')`);
-  if (direction === 'out') where.push(`t.type IN ('hold','release','penalty','commission')`);
+  if (direction === 'in') where.push(`t.type IN ('topup','refund','payout','compensation')`);
+  if (direction === 'out') where.push(`t.type IN ('hold','release','penalty','commission','withdrawal')`);
   if (from) { where.push('DATE(t.created_at) >= ?'); params.push(from); }
   if (to) { where.push('DATE(t.created_at) <= ?'); params.push(to); }
 
@@ -311,6 +312,7 @@ async function getStatement(userId, opts = {}) {
               WHEN t.type IN ('hold','refund','release') THEN 'Service Professional'
               WHEN t.type = 'payout' THEN 'Customer'
               WHEN t.type = 'topup' THEN 'JazzCash/Easypaisa Top-up'
+              WHEN t.type = 'compensation' THEN 'Customer cancellation compensation'
               WHEN t.type = 'commission' THEN 'Platform'
               WHEN t.type = 'penalty' THEN 'Platform (Penalty)'
               ELSE 'Platform'

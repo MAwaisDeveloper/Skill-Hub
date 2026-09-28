@@ -162,7 +162,7 @@ export default function ProProfile() {
               {profile.verification_status === 'verified' ? 'Update & Re-submit' : 'Submit for Verification'}
             </button>
             <p className="muted mt">
-              <b>Rules:</b> only <b>Verified</b> professionals appear in search and receive bookings. Rejection shows a reason — you can fix and resubmit.
+              <b>Rules:</b> only <b>Verified</b> professionals appear in search and receive bookings. Rejection shows a reason: you can fix and resubmit.
             </p>
           </div>
         </div>

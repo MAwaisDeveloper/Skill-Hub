@@ -33,7 +33,7 @@ export default function CustomerWithdraw() {
 
   const checkTitle = async () => {
     setError(''); setTitle(null);
-    if (!/^03\d{9}$/.test(wd.account_number.trim())) { setError('Sahi number likhein (03XXXXXXXXX)'); return; }
+    if (!/^03\d{9}$/.test(wd.account_number.trim())) { setError('Please enter a valid mobile number (03XXXXXXXXX).'); return; }
     setChecking(true);
     try {
       const res = await api.post('/customer/wallet/account-title', { provider: wd.provider, mobile_number: wd.account_number.trim() }, token);
@@ -48,14 +48,16 @@ export default function CustomerWithdraw() {
     if (title && !title.found) { setError('Is number par account nahi mila (Not Found)'); return; }
     try {
       const res = await api.post('/customer/wallet/withdraw', { amount: Number(amount), provider: wd.provider, account_number: wd.account_number.trim() }, token);
-      setMsg(`Withdrawal request ho gayi: Rs ${Number(amount).toLocaleString()} → ${res.to}. Admin transfer ke baad "completed" ho jayega.`);
+      setMsg(res.status === 'completed'
+        ? `Withdrawal completed instantly: Rs ${Number(amount).toLocaleString()} → ${res.to}. Check your notifications for the transaction ID.`
+        : `Withdrawal requested: Rs ${Number(amount).toLocaleString()} → ${res.to}. It is processing — you will be notified as soon as the transfer completes.`);
       setAmount(''); setTitle(null);
       await load();
     } catch (e) { setError(e.message); }
   };
 
   return (
-    <Layout title="Withdraw to JazzCash / Easypaisa" subtitle="Wallet se apne mobile account par paise transfer karwayen — admin confirm karega">
+    <Layout title="Withdraw to JazzCash / Easypaisa" subtitle="Transfer your wallet balance to your mobile account — confirmed by the platform">
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
@@ -67,7 +69,7 @@ export default function CustomerWithdraw() {
 
       <div className="card">
         <h2>💸 Withdraw Request</h2>
-        <p className="muted mb">Provider + number → <b>naam verify</b> (registered account holder dikhega, ya Not Found) → amount → request. Paisa foran wallet se kat jayega aur admin transfer karne par complete hoga.</p>
+        <p className="muted mb">Choose provider + number → <b>verify the account title</b> (shows the registered holder, or Not Found) → enter amount → request. The gateway transfers the money to your account automatically: usually within seconds.</p>
 
         <div className="provider-cards">
           {[{ key: 'jazzcash', name: 'JazzCash', cls: 'prov-jazzcash', tag: 'Instant transfer' }, { key: 'easypaisa', name: 'Easypaisa', cls: 'prov-easypaisa', tag: 'Instant transfer' }].map((p) => (
@@ -80,7 +82,7 @@ export default function CustomerWithdraw() {
 
         <div className="grid cols-2" style={{ gap: 14, marginTop: 8 }}>
           <div>
-            <label>Account Number (jis par paise chahiye)</label>
+            <label>Account Number (where you want the money)</label>
             <div className="row">
               <input style={{ maxWidth: 200 }} placeholder="03XXXXXXXXX" maxLength={11} value={wd.account_number}
                 onChange={(e) => { setWd({ ...wd, account_number: e.target.value }); setTitle(null); }} />
@@ -89,7 +91,7 @@ export default function CustomerWithdraw() {
             {title && (
               title.found
                 ? <div className="alert success mt">✅ Account title: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
-                : <div className="alert error mt">❌ <b>Not Found</b> — is number par registered account nahi mila. Number check karein.</div>
+                : <div className="alert error mt">❌ <b>Not Found</b> — no account found registered on this number. Please double-check.</div>
             )}
           </div>
           <div>
@@ -126,7 +128,7 @@ export default function CustomerWithdraw() {
       </div>
 
       {invoice && <InvoiceModal kind={invoice.kind} id={invoice.id} onClose={() => setInvoice(null)} />}
-      <p className="muted">Note: Booking payments sirf escrow se release hoti hain — yahan sirf apna available balance withdraw hota hai.</p>
+      <p className="muted">Note: Booking payments sirf escrow se release hoti hain: yahan sirf apna available balance withdraw hota hai.</p>
     </Layout>
   );
 }

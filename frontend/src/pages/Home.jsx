@@ -22,7 +22,7 @@ export default function Home() {
         <h1>Verified Skill, Trusted Service.</h1>
         <p>
           Hunar is a complete booking-to-payout marketplace: book verified Service Professionals, pay online into a
-          secure escrow wallet, and the platform releases 90% to the professional (10% commission) only when you
+          secure escrow wallet, and the platform releases 90% to the professional (0% service charges (free launch offer)) only when you
           confirm the job is done. Zero cash disputes, full protection for both sides.
         </p>
         <div className="row mt">
@@ -45,7 +45,7 @@ export default function Home() {
         <h2>How it works</h2>
         <ol style={{ paddingLeft: 20, lineHeight: 2 }}>
           <li>Book a verified professional for a date + time slot</li>
-          <li>Confirm the final price — full amount is held in your wallet (escrow)</li>
+          <li>Confirm the final price: full amount is held in your wallet (escrow)</li>
           <li>Professional arrives → you share the OTP to start work</li>
           <li>Job completed → confirm & release, or report a problem</li>
           <li>Payment auto-releases after 24h if you don't respond (fair for both sides)</li>
@@ -54,7 +54,7 @@ export default function Home() {
       </div>
       <footer className="footer">
         <span><b>Hunar</b> — Verified Skill, Trusted Service</span>
-        <span>Escrow-protected payments · 10% commission · Manual CNIC verification</span>
+        <span>Escrow-protected payments · 0% service charges (free launch offer) · Manual CNIC verification</span>
       </footer>
     </div>
   );

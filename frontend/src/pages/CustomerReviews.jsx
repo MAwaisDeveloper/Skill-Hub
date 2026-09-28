@@ -23,7 +23,7 @@ export default function CustomerReviews() {
   const avg = reviews.length ? (reviews.reduce((a, r) => a + Number(r.rating), 0) / reviews.length).toFixed(1) : null;
 
   return (
-    <Layout title="My Reviews" subtitle="Aap ne jo ratings di hain — har completed booking ke baad professional ko rate karein">
+    <Layout title="My Reviews" subtitle="Ratings you have given — rate the provider after each completed booking">
       {error && <div className="alert error">{error}</div>}
 
       {reviews.length > 0 && (
@@ -35,7 +35,7 @@ export default function CustomerReviews() {
       )}
 
       <div className="card">
-        {reviews.length === 0 && <Empty icon="★">Abhi koi review nahi diya. Booking complete hone par <Link to="/customer/bookings">My Bookings</Link> se rate karein.</Empty>}
+        {reviews.length === 0 && <Empty icon="★">No reviews yet. Once a booking is completed, you can rate the provider from <Link to="/customer/bookings">My Bookings</Link>.</Empty>}
         {reviews.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>Booking</th><th>Professional</th><th>Service</th><th>Your Rating</th><th>Comment</th><th>Pro Rating Now</th></tr></thead>
