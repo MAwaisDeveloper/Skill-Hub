@@ -7,6 +7,35 @@ function useAppSafe() {
   try { return useApp(); } catch { return { session: null }; }
 }
 
+// ---------- Balance hide/show (privacy) ----------
+// Preference localStorage mein persist hoti hai: toggle karte hi poore app par (har page, har role) apply.
+export function useBalanceHidden() {
+  const [hidden, setHidden] = useState(() => localStorage.getItem('hunar_balance_hidden') === '1');
+  const toggle = () => setHidden((h) => {
+    localStorage.setItem('hunar_balance_hidden', h ? '0' : '1');
+    return !h;
+  });
+  return [hidden, toggle];
+}
+
+// BalanceAmount: amount + chhota eye toggle. hidden par amount 'Rs ••••••' mask ho jata hai.
+export function BalanceAmount({ amount, hidden, onToggle, className = '', eyeTitle }) {
+  return (
+    <span className={`bal-wrap ${className}`}>
+      <span>{hidden ? 'Rs ••••••' : amount}</span>
+      <button
+        type="button"
+        className={`bal-eye ${hidden ? 'off' : ''}`}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+        aria-label={hidden ? 'Show balance' : 'Hide balance'}
+        title={eyeTitle || (hidden ? 'Show balance' : 'Hide balance')}
+      >
+        {hidden ? '🙈' : '👁'}
+      </button>
+    </span>
+  );
+}
+
 // ---------- Invoice viewer (print + Save-as-PDF, fully free) ----------
 // kind: 'topup' (ref), 'booking' (id), 'payout' (id), 'withdrawal' (id), 'penalty' (id)
 function openPrintableInvoice(inv) {
@@ -230,7 +259,7 @@ export function StatementView({ fetcher, title = 'Transaction History', subtitle
               <tbody>
                 {data.rows.map((t) => {
                   const dir = ['topup', 'refund', 'payout', 'compensation'].includes(t.type) ? 'in' : 'out';
-                  const invKind = t.booking_id ? 'booking' : t.type === 'topup' ? 'topup' : t.type === 'payout' ? 'payout' : t.type === 'penalty' ? 'penalty' : null;
+                  const invKind = t.booking_id ? 'booking' : t.type === 'topup' ? 'topup' : t.type === 'payout' ? 'payout' : t.type === 'penalty' ? 'penalty' : t.type === 'withdrawal' ? 'withdrawal' : null;
                   return (
                     <tr key={t.id}>
                       <td>{t.created_at?.slice(0, 16)}</td>
@@ -247,6 +276,7 @@ export function StatementView({ fetcher, title = 'Transaction History', subtitle
                       <td>
                         {invKind === 'topup' && t.topup_ref ? <button className="btn small secondary" onClick={() => setInv({ kind: 'topup', reference: t.topup_ref })}>🧾</button>
                           : invKind === 'penalty' && t.penalty_id ? <button className="btn small secondary" onClick={() => setInv({ kind: 'penalty', id: t.penalty_id })}>🧾</button>
+                          : invKind === 'withdrawal' && t.withdrawal_id ? <button className="btn small secondary" onClick={() => setInv({ kind: 'withdrawal', id: t.withdrawal_id })}>🧾</button>
                           : invKind && t.booking_id ? <button className="btn small secondary" onClick={() => setInv({ kind: invKind, id: t.booking_id })}>🧾</button>
                           : <span className="muted">—</span>}
                       </td>
@@ -267,14 +297,14 @@ export function StatementView({ fetcher, title = 'Transaction History', subtitle
 
 // Cancel consequence modal: exact breakdown before the user confirms cancellation
 const REASONS = [
-  'Kaam adhoora / ghalat hua',
-  'Professional waqt par nahi aaya',
-  'Professional raabta nahi kar raha',
-  'Extra paisay ki demand hui',
-  'Tabdeeli ke baad masla (offer/price)',
-  'Property ko nuqsaan pohancha',
-  'Behtari / safai ka masla',
-  'Koi aur masla',
+  'Work was incomplete or done incorrectly',
+  'Professional did not arrive on time',
+  'Professional is not responding',
+  'Demanded extra payment',
+  'Problem after a change (offer/price)',
+  'Damage caused to property',
+  'Behavior or cleanliness issue',
+  'Other problem',
 ];
 
 // Report a Problem modal — prompt() ki jagah proper form (reason dropdown + description).
@@ -294,7 +324,7 @@ export function DisputeModal({ bookingCode, onSubmit, onClose, busy = false }) {
       <div className="modal card" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Report a Problem">
         <h2>⚠️ Report a Problem: Booking {bookingCode}</h2>
         <p className="muted">Your payment stays safely in escrow until an administrator reviews the case and decides the outcome.</p>
-        <label htmlFor="dispute-reason">Problem kis cheez ki hai?</label>
+        <label htmlFor="dispute-reason">What is the problem about?</label>
         <select id="dispute-reason" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: '100%', marginBottom: 10 }}>
           {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
@@ -302,7 +332,7 @@ export function DisputeModal({ bookingCode, onSubmit, onClose, busy = false }) {
         <textarea
           id="dispute-description"
           rows={4}
-          placeholder="Kya masla hua — kaam adhoora, raabta nahi, tabdeeli ki ghiar…"
+          placeholder="Describe what went wrong: incomplete work, no response, unexpected changes…"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           style={{ width: '100%' }}

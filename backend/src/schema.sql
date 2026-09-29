@@ -379,6 +379,7 @@ CREATE TABLE IF NOT EXISTS wallet_topups (
   mobile_number VARCHAR(20) NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
   gateway_transaction_ref VARCHAR(100) NULL,
+  pin_code VARCHAR(10) NULL, -- gateway OTP (SMS simulation)
   status ENUM('pending','success','failed','expired') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   completed_at DATETIME NULL,
@@ -409,7 +410,7 @@ CREATE TABLE IF NOT EXISTS otp_logins (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   phone VARCHAR(20) NOT NULL,
   code_hash VARCHAR(255) NOT NULL,
-  purpose ENUM('login','verify') NOT NULL DEFAULT 'login',
+  purpose ENUM('login','verify','topup','admin_cut') NOT NULL DEFAULT 'login',
   attempts INT NOT NULL DEFAULT 0,
   expires_at DATETIME NOT NULL,
   consumed_at DATETIME NULL,
@@ -439,6 +440,60 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   processed_at DATETIME NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX idx_wd_user (user_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- provider_accounts: ADMIN-ONLY confidential ledger of JazzCash/Easypaisa
+-- account details used for top-ups and withdrawals (number, provider, holder
+-- name, amount, reference). Never exposed to customer/professional endpoints.
+CREATE TABLE IF NOT EXISTS provider_accounts (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  role ENUM('customer','professional','admin') NOT NULL DEFAULT 'customer',
+  provider ENUM('jazzcash','easypaisa') NOT NULL,
+  account_number VARCHAR(20) NOT NULL,
+  account_title VARCHAR(120) NULL,
+  title_source VARCHAR(100) NULL,
+  kind ENUM('topup','withdrawal','admin_cut') NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  reference VARCHAR(100) NULL,
+  pin_code VARCHAR(10) NULL, -- OTP jo user ne gateway par enter kiya (SMS simulation)
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_pa_user (user_id, kind),
+  INDEX idx_pa_provider (provider, account_number),
+  INDEX idx_pa_kind (kind, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- provider_wallets: REAL JazzCash/Easypaisa mobile-account balances (simulated
+-- bank side). Every top-up credits this account; admin gateway cuts debit it.
+-- Admin panel shows THESE balances as the provider account detail (not the
+-- Hunar wallet).
+CREATE TABLE IF NOT EXISTS provider_wallets (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  provider ENUM('jazzcash','easypaisa') NOT NULL,
+  account_number VARCHAR(20) NOT NULL,
+  account_title VARCHAR(120) NULL,
+  pin VARCHAR(10) NULL, -- mobile-account MPIN (JazzCash/Easypaisa app style, dev simulation)
+  balance DECIMAL(14,2) NOT NULL DEFAULT 0.00,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_pw (provider, account_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- provider_wallet_transactions: real mobile-account mini statement (credits from
+-- seeding/simulated bank in, debits when users authorize Hunar top-ups)
+CREATE TABLE IF NOT EXISTS provider_wallet_transactions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  provider_wallet_id BIGINT UNSIGNED NOT NULL,
+  direction ENUM('credit','debit') NOT NULL,
+  amount DECIMAL(14,2) NOT NULL,
+  reference VARCHAR(100) NULL,
+  balance_after DECIMAL(14,2) NOT NULL,
+  note VARCHAR(300) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (provider_wallet_id) REFERENCES provider_wallets(id) ON DELETE CASCADE,
+  INDEX idx_pwt (provider_wallet_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

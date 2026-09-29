@@ -51,6 +51,7 @@ const MENUS = {
     { to: '/admin?tab=transactions', label: 'Transactions', ico: '💳' },
     { to: '/admin?tab=topups', label: 'Top-ups', ico: '⬆' },
     { to: '/admin?tab=payouts', label: 'Withdrawals', ico: '💸' },
+    { to: '/admin?tab=provider_accounts', label: 'Provider Accounts', ico: '🏦' },
     { to: '/admin?tab=penalties', label: 'Penalties', ico: '⚠' },
     { to: '/admin?tab=refunds', label: 'Refunds', ico: '↩' },
     { to: '/admin?tab=messages', label: 'Messages', ico: '💬' },
@@ -134,8 +135,12 @@ export default function Layout({ children, title, subtitle, actions }) {
   }, [profileOpen]);
   useEffect(() => { setProfileOpen(false); setNotifOpen(false); }, [loc.pathname, loc.search]);
 
-  const name = session?.profile?.full_name || session?.user?.phone || 'User';
-  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();  const toggleSidebar = () => {
+  // Header identity: profile ka full name (admin ke liye backend 'Administrator' bhejta hai), fallback order safe
+  const ROLE_LABELS = { customer: 'Customer', professional: 'Professional', admin: 'Administrator' };
+  const name = session?.profile?.full_name || (role === 'admin' ? 'Administrator' : session?.user?.email?.split('@')[0]) || 'User';
+  const roleLabel = ROLE_LABELS[role] || role;
+  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  const toggleSidebar = () => {
     setCollapsed((c) => {
       localStorage.setItem('hunar_sidebar_collapsed', c ? '0' : '1');
       return !c;
@@ -145,7 +150,14 @@ export default function Layout({ children, title, subtitle, actions }) {
   const sidebar = (
     <aside className={`sidebar ${menuOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
       <button type="button" className="side-collapse" onClick={toggleSidebar} title={collapsed ? 'Show sidebar' : 'Hide sidebar'} aria-label={collapsed ? 'Show sidebar' : 'Hide sidebar'}>
-        {collapsed ? '»' : '«'}
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="9.5" y1="4" x2="9.5" y2="20" />
+          <line className="collapse-arrow" x1={collapsed ? '13.5' : '5.5'} y1="12" x2={collapsed ? '17.5' : '6.5'} y2="12" />
+          {collapsed
+            ? <polyline className="collapse-arrow" points="15.5,9.5 18,12 15.5,14.5" />
+            : <polyline className="collapse-arrow" points="7,9.5 4.5,12 7,14.5" />}
+        </svg>
       </button>
       <div className="side-label">{role === 'admin' ? 'Administration' : role === 'professional' ? 'Service Provider Panel' : 'Customer Panel'}</div>
       {menu.map((m) =>
@@ -215,14 +227,13 @@ export default function Layout({ children, title, subtitle, actions }) {
             <button type="button" className="avatar-btn" onClick={(e) => { e.stopPropagation(); setProfileOpen(!profileOpen); }} aria-label="Account menu">
               <div className="avatar">{initials}</div>
               <span className="avatar-caret">▾</span>
-            </button>
-            <div className="who">
-              <div className="name">{name}</div>
-              <div className="role">{role === 'professional' ? 'Professional' : role === 'admin' ? 'Administrator' : 'Customer'}</div>
-            </div>
+            </button>              <div className="who">
+                <div className="name">{name}</div>
+                <div className="role">{roleLabel}</div>
+              </div>
             {profileOpen && (
               <div className="top-dd-panel profile-dd" onClick={(e) => e.stopPropagation()}>
-                <div className="dd-head dd-user"><b>{name}</b><span>{session?.user?.phone}</span></div>
+                <div className="dd-head dd-user"><b>{name}</b><span>{session?.profile?.email || session?.user?.email || session?.user?.phone}</span></div>
                 <button className="dd-item dd-link" onClick={() => { setProfileOpen(false); navigate('/settings'); }}>
                   <span className="dd-ico">👤</span><span className="dd-body">My Profile & Settings</span>
                 </button>

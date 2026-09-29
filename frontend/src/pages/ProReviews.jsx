@@ -35,7 +35,7 @@ export default function ProReviews() {
       )}
 
       <div className="card">
-        {reviews.length === 0 && <Empty icon="★">Abhi koi review nahi aayi. Jobs complete karein: customers khud rate karenge.</Empty>}
+        {reviews.length === 0 && <Empty icon="★">No reviews yet. Complete jobs and customers will rate your work.</Empty>}
         {reviews.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>Booking</th><th>Rating</th><th>Comment</th></tr></thead>

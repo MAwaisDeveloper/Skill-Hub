@@ -62,8 +62,8 @@ export default function InvoicePage() {
           </table>
 
           <p className="muted mt" style={{ fontSize: 12 }}>
-            Ye invoice Hunar platform par auto-generate hui hai. Escrow-protected payment: commission sirf release
-            par deduct hoti hai. Support: admin@hunar.pk
+            This invoice was generated automatically on the Hunar platform. Escrow-protected payment: service charges
+            are deducted only on release. Support: admin@hunar.pk
           </p>
         </div>
       )}

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatementView, DirBadge, Amt, Empty, InvoiceModal } from '../components/ui';
+import { StatementView, DirBadge, Amt, Empty, InvoiceModal, BalanceAmount, useBalanceHidden } from '../components/ui';
 
 export default function ProWallet() {
   const { session } = useApp();
+  const navigate = useNavigate();
   const token = session?.token;
   const [wallet, setWallet] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -17,6 +19,8 @@ export default function ProWallet() {
   const [invoice, setInvoice] = useState(null); // { kind, id }
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [balanceHidden, toggleBalance] = useBalanceHidden();
+  const [topupForm, setTopupForm] = useState({ provider: 'jazzcash', mobile_number: '', amount: '' });
 
   const load = async () => {
     try {
@@ -31,6 +35,14 @@ export default function ProWallet() {
     } catch (e) { setError(e.message); }
   };
   useEffect(() => { load(); }, []);
+
+  const startTopup = async () => {
+    setError(''); setMsg('');
+    try {
+      const res = await api.post('/professional/wallet/topup', { provider: topupForm.provider, mobile_number: topupForm.mobile_number.trim(), amount: Number(topupForm.amount) }, token);
+      navigate(`/wallet/topup/${res.reference}/pay`);
+    } catch (e) { setError(e.message); }
+  };
 
   const checkTitle = async () => {
     setError(''); setTitle(null);
@@ -67,9 +79,32 @@ export default function ProWallet() {
       {error && <div className="alert error">{error}</div>}
 
       <div className="grid cols-3">
-        <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Available Balance</span></div>
+        <div className="card stat"><span className="value"><BalanceAmount amount={fmt(wallet?.balance)} hidden={balanceHidden} onToggle={toggleBalance} /></span><span className="label">Available Balance</span></div>
         <div className="card stat"><span className="value">{fmt(profile?.payout_account || '—')}</span><span className="label">Payout Account</span><span className="hint">{profile?.payout_provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} · change it from your profile page</span></div>
-        <div className="card stat"><span className="value">{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">active bookings ke against (info)</span></div>
+        <div className="card stat"><span className="value">{fmt(wallet?.held_amount || 0)}</span><span className="label">Held (Escrow)</span><span className="hint">against active bookings (info)</span></div>
+      </div>
+
+      <div className="card">
+        <h2>➕ Add Money to Wallet (JazzCash / Easypaisa)</h2>
+        <p className="muted mb">Mobile account par OTP aayega (jaisa JazzCash/Easypaisa app bhejta hai) — OTP enter karo, paise mobile account se cut ho kar wallet mein aa jayenge.</p>
+        <div className="grid cols-3" style={{ gap: 12, alignItems: 'end' }}>
+          <div>
+            <label>Provider</label>
+            <select value={topupForm.provider} onChange={(e) => setTopupForm({ ...topupForm, provider: e.target.value })}>
+              <option value="jazzcash">JazzCash</option>
+              <option value="easypaisa">Easypaisa</option>
+            </select>
+          </div>
+          <div>
+            <label>Mobile Account Number (03...)</label>
+            <input placeholder="03XXXXXXXXX" maxLength={11} value={topupForm.mobile_number} onChange={(e) => setTopupForm({ ...topupForm, mobile_number: e.target.value })} />
+          </div>
+          <div>
+            <label>Amount (min 100)</label>
+            <input type="number" placeholder="e.g. 2000" min={100} value={topupForm.amount} onChange={(e) => setTopupForm({ ...topupForm, amount: e.target.value })} />
+          </div>
+        </div>
+        <button className="btn mt" onClick={startTopup} disabled={!topupForm.mobile_number || !topupForm.amount || Number(topupForm.amount) < 100}>Send OTP & Add Money</button>
       </div>
 
       <div className="card">
@@ -101,7 +136,7 @@ export default function ProWallet() {
             <label>Amount (min 500)</label>
             <input type="number" placeholder="min 500" min={500} value={amount} onChange={(e) => setAmount(e.target.value)} />
             {wallet && Number(wallet.balance) >= 500 && (
-              <button className="btn small secondary" onClick={() => setAmount(String(Math.floor(Number(wallet.balance))))}>Poora balance ({fmt(Math.floor(Number(wallet.balance)))})</button>
+              <button className="btn small secondary" onClick={() => setAmount(String(Math.floor(Number(wallet.balance))))}>Full balance ({fmt(Math.floor(Number(wallet.balance)))})</button>
             )}
           </div>
         </div>

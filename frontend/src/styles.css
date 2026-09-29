@@ -113,6 +113,19 @@ a { color: var(--green); text-decoration: none; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: all 0.15s;
 }
 .side-collapse:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.side-collapse .collapse-icon { display: block; }
+@media (max-width: 900px) {
+  /* Mobile: drawer ke kinare par hamesha-visible vertical panel tab
+     (open/close icon har sidebar par clearly dikhe, chhupa nahi) */
+  .side-collapse {
+    display: flex; position: static; align-self: flex-end;
+    width: 20px; min-height: 72px; height: auto;
+    border-radius: 0 8px 8px 0; border-left: none;
+    padding: 8px 0; box-shadow: none;
+    flex-direction: column; align-items: center; justify-content: center;
+  }
+  .side-collapse .collapse-icon { display: block; }
+}
 .sidebar.collapsed { width: 64px; min-width: 64px; overflow: visible; }
 .sidebar.collapsed .side-label,
 .sidebar.collapsed .side-footer,
@@ -124,7 +137,8 @@ a { color: var(--green); text-decoration: none; }
 .sidebar.collapsed .side-collapse { right: -13px; }
 
 @media (max-width: 900px) {
-  .side-collapse { display: none; } /* mobile par hamburger/overlay hi collapse hai */
+  /* desktop-only absolute positioning reset: mobile par tab sidebar ke andar flow karta hai */
+  .side-collapse { position: static; right: auto; top: auto; }
 }
 .sidebar a.side-link {
   display: flex; align-items: center; gap: 10px;
@@ -532,6 +546,78 @@ input.valid, textarea.valid { border-color: #2f9e44 !important; background: #fbf
   .btn-lg { padding: 11px 16px; }
 }
 
+/* ===== Mobile polish: app-quality feel on phones ===== */
+/* Touch targets: har interactive element kam az kam 40px (mobile usability) */
+@media (max-width: 640px) {
+  .btn { min-height: 40px; }
+  input, select, textarea { font-size: 16px; } /* iOS zoom-on-focus se bachne ke liye 16px */
+  input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; }
+
+  /* Topbar: brand + identity compact, dono cheezein dikhein */
+  .topbar { padding: 0 10px; height: 56px; }
+  .topbar .brand { font-size: 18px; }
+  .topbar-right { gap: 8px; }
+  .topbar-right .who .name { font-size: 12.5px; max-width: 110px; }
+  .topbar-right .who .role { font-size: 9.5px; }
+  .avatar { width: 32px; height: 32px; font-size: 13px; }
+  .bell { font-size: 17px; padding: 6px; }
+  .side-overlay { inset: 56px 0 0 0; }
+  .sidebar { top: 56px; }
+
+  /* Notification + profile dropdown: screen ki poori width lein */
+  .top-dd-panel { position: fixed; top: 60px; left: 8px; right: 8px; width: auto; max-width: none; }
+  .profile-dd { width: auto; }
+
+  /* Tables: horizontal scroll ka clear hint + sticky pehli column feel */
+  .card table { font-size: 12.5px; }
+  .card table th, .card table td { padding: 8px 8px; white-space: nowrap; }
+
+  /* Wallet hero: stack + chhota amount */
+  .wallet-hero { padding: 20px 18px; }
+  .wallet-hero .wh-amount { font-size: 30px; }
+  .wh-trust { padding: 10px 14px; }
+  .wh-trust .value { font-size: 24px; }
+
+  /* Stat cards: value size readable rakho, bade numbers wrap na karen */
+  .stat .value { font-size: 19px; word-break: break-word; }
+
+  /* Page head: title pehle, actions poori width ke sath neeche */
+  .page-head { flex-direction: column; align-items: stretch; }
+  .page-head .row { width: 100%; }
+  .page-head .row .btn { flex: 1; }
+
+  /* Modals: bottom-sheet jaisa feel, keyboard ke sath comfortable */
+  .modal-backdrop { padding: 10px; align-items: flex-end; }
+  .modal { max-height: 88vh; border-radius: 16px 16px 10px 10px; }
+
+  /* Filter rows aur KV grids ek column mein */
+  .filters { gap: 8px; }
+  .kv { grid-template-columns: 130px 1fr; font-size: 13px; }
+  .provider-cards { grid-template-columns: 1fr; }
+  .role-cards { gap: 8px; }
+
+  /* Flow diagram vertical */
+  .flow { flex-direction: column; }
+  .flow .arrow { transform: rotate(90deg); padding: 2px 0; }
+
+  /* Statement summary chips pehle se chhoti screen par 2x2 */
+  .grid.cols-3, .grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+
+  /* Chat bubbles poori width use karein */
+  .chat-msg { max-width: 92%; }
+
+  /* OTP input thoda tight */
+  .otp-input { letter-spacing: 6px; font-size: 18px; }
+}
+
+/* Bahut chhoti screens (320-360px): aur compact */
+@media (max-width: 360px) {
+  .topbar .brand { font-size: 16px; }
+  .topbar-right .who .name { max-width: 84px; }
+  .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+  .wallet-hero .wh-amount { font-size: 26px; }
+}
+
 /* ===== Responsive & overflow guards — kabhi bhi layout se bahar na nikle ===== */
 html, body { max-width: 100%; overflow-x: hidden; }
 .main { min-width: 0; } /* flex child tables ko shrink karne do */
@@ -569,6 +655,18 @@ img, iframe, video { max-width: 100%; }
 .role-card .rc-ico { font-size: 26px; }
 .role-card b { font-size: 14.5px; color: var(--green-deep); }
 .role-card .muted { font-size: 12px; }
+
+/* ===== Balance hide/show (privacy eye) ===== */
+.bal-wrap { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.bal-eye {
+  background: none; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 4px 7px; color: var(--muted); transition: all 0.15s;
+}
+.bal-eye:hover { background: #eef4f0; border-color: var(--green); }
+.wallet-hero .bal-eye { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.35); color: #fff; }
+.wallet-hero .bal-eye:hover { background: rgba(255,255,255,0.25); border-color: #fff; }
+.stat .value .bal-eye { font-size: 13px; padding: 3px 6px; }
+.bal-eye.off { opacity: 0.85; }
 
 /* ===================== WALLET ===================== */
 .wallet-hero {

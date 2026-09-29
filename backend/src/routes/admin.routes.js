@@ -3,6 +3,7 @@ const { pool } = require('../config/db');
 const { asyncHandler, HttpError } = require('../middleware/error');
 const { authenticate, requireRole } = require('../middleware/auth');
 const verificationService = require('../services/verification.service');
+const adminGateway = require('../services/admin-gateway.service');
 
 const adminOnly = [authenticate, requireRole('admin')];
 
@@ -329,6 +330,67 @@ router.get('/topups', ...adminOnly, asyncHandler(async (req, res) => {
     [...params, perPage, (page - 1) * perPage]
   );
   res.json({ rows, pagination: pager(res, page, perPage, total) });
+}));
+
+// Provider accounts ledger (ADMIN-ONLY): har JazzCash/Easypaisa top-up/withdrawal
+// ka snapshot — number, provider, account title (kis ke naam par), amount, status.
+// Ye records customer/professional ko kabhi nahi dikhte.
+router.get('/provider-accounts', ...adminOnly, asyncHandler(async (req, res) => {
+  const { page, perPage } = paging(req);
+  const where = ['1=1'];
+  const params = [];
+  if (req.query.kind) { where.push('pa.kind = ?'); params.push(req.query.kind); }
+  if (req.query.provider) { where.push('pa.provider = ?'); params.push(req.query.provider); }
+  if (req.query.q) { where.push('(pa.account_number LIKE ? OR pa.account_title LIKE ? OR u.phone LIKE ? OR COALESCE(cu.full_name, sp.full_name) LIKE ?)'); const like = `%${req.query.q}%`; params.push(like, like, like, like); }
+  const baseSql = `FROM provider_accounts pa
+    JOIN users u ON u.id = pa.user_id
+    LEFT JOIN customers cu ON cu.user_id = u.id
+    LEFT JOIN service_professionals sp ON sp.user_id = u.id
+    LEFT JOIN wallets w ON w.user_id = pa.user_id
+    WHERE ${where.join(' AND ')}`;
+  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${baseSql}`, params);
+  const [rows] = await pool.query(
+    `SELECT pa.*, u.phone, COALESCE(cu.full_name, sp.full_name) AS user_name, u.email,
+            w.balance AS user_balance
+     ${baseSql}
+     ORDER BY pa.id DESC LIMIT ? OFFSET ?`,
+    [...params, perPage, (page - 1) * perPage]
+  );
+  const [[sums]] = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN pa.kind = 'topup' THEN pa.amount END), 0) AS total_topups,
+       COALESCE(SUM(CASE WHEN pa.kind = 'withdrawal' THEN pa.amount END), 0) AS total_withdrawals,
+       COUNT(*) AS total_records,
+       COUNT(DISTINCT pa.user_id) AS total_users,
+       COUNT(DISTINCT CONCAT(pa.provider, pa.account_number)) AS total_accounts
+     FROM provider_accounts pa`
+  );
+  res.json({ rows, pagination: pager(res, page, perPage, total), summary: sums });
+}));
+
+// ---- Gateway Console (real JazzCash/Easypaisa mobile accounts, OTP-authorized cuts) ----
+// Real mobile-account balances (NOT Hunar wallet balances)
+router.get('/gateway/wallets', ...adminOnly, asyncHandler(async (req, res) => {
+  res.json(await adminGateway.listWallets());
+}));
+
+router.get('/gateway/wallets/:id', ...adminOnly, asyncHandler(async (req, res) => {
+  res.json(await adminGateway.walletStatement(Number(req.params.id)));
+}));
+
+// Dev helper: simulate the user topping up their own JazzCash/Easypaisa app
+router.post('/gateway/credit', ...adminOnly, asyncHandler(async (req, res) => {
+  res.json(await adminGateway.adminCredit(req.body));
+}));
+
+// Admin cut step 1: send OTP to the mobile account
+router.post('/gateway/cut/initiate', ...adminOnly, asyncHandler(async (req, res) => {
+  res.json(await adminGateway.initiateCut(req.body));
+}));
+
+// Admin cut step 2: verify OTP -> debit the mobile account
+router.post('/gateway/cut/confirm', ...adminOnly, asyncHandler(async (req, res) => {
+  res.json(await adminGateway.confirmCut(req.body));
 }));
 
 // All penalties (owed + settled) — pro cancel ke negative entries

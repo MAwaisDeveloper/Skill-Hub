@@ -237,6 +237,44 @@ router.get('/wallet', ...proOnly, asyncHandler(async (req, res) => {
   res.json(await walletService.getWallet(req.user.id));
 }));
 
+// ---- Professional top-up (same OTP gateway as customers) ----
+router.post('/wallet/topup', ...proOnly, asyncHandler(async (req, res) => {
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewayInit(req.user.id, req.body.provider, req.body.mobile_number, req.body.amount));
+}));
+
+router.post('/wallet/topup/:reference/send-otp', ...proOnly, asyncHandler(async (req, res) => {
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewaySendOtp({ reference: req.params.reference }));
+}));
+
+router.post('/wallet/topup/:reference/verify-otp', ...proOnly, asyncHandler(async (req, res) => {
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewayVerifyOtp({ reference: req.params.reference, otp: req.body.otp }));
+}));
+
+router.post('/wallet/topup/:reference/confirm', ...proOnly, asyncHandler(async (req, res) => {
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewayCallback({ reference: req.params.reference, status: req.body.status || 'success' }));
+}));
+
+router.get('/wallet/topup/:reference', ...proOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT t.* FROM wallet_topups t WHERE t.gateway_transaction_ref = ? AND t.user_id = ?`,
+    [req.params.reference, req.user.id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Top-up not found'), { status: 404 });
+  res.json(rows[0]);
+}));
+
+router.get('/wallet/topups', ...proOnly, asyncHandler(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT t.* FROM wallet_topups t JOIN wallets w ON w.id = t.wallet_id WHERE w.user_id = ? ORDER BY t.id DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(rows);
+}));
+
 router.get('/wallet/transactions', ...proOnly, asyncHandler(async (req, res) => {
   res.json(await walletService.getTransactions(req.user.id));
 }));

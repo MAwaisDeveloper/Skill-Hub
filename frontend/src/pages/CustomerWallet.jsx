@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatementView } from '../components/ui';
+import { StatementView, BalanceAmount, useBalanceHidden } from '../components/ui';
 
 // Customer wallet — real mobile-wallet jaisa case:
 // 1) Add Money: provider card select -> number -> "Check Name" (owner ka naam ya Not Found)
@@ -25,6 +25,7 @@ export default function CustomerWallet() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const [balanceHidden, toggleBalance] = useBalanceHidden();
 
   const load = async () => {
     try {
@@ -47,7 +48,7 @@ export default function CustomerWallet() {
 
   const startTopup = async () => {
     setError(''); setMsg('');
-    if (!(Number(topup.amount) >= 100)) { setError('Minimum top-up Rs 100 hai'); return; }
+    if (!(Number(topup.amount) >= 100)) { setError('Minimum top-up amount is Rs 100.'); return; }
     if (title && !title.found) { setError('No account is registered on this number (Not Found). Please check the number.'); return; }
     try {
       const res = await api.post('/customer/wallet/topup', { ...topup, amount: Number(topup.amount), mobile_number: topup.mobile_number.trim() }, token);
@@ -77,8 +78,10 @@ export default function CustomerWallet() {
       <div className="wallet-hero">
         <div>
           <div className="wh-label">Available Balance</div>
-          <div className="wh-amount">{wallet ? fmt(wallet.balance) : '…'}</div>
-          <div className="wh-sub">🔒 Held (escrow): <b>{wallet ? fmt(wallet.held_amount) : '…'}</b> — locked for active bookings</div>
+          <div className="wh-amount">
+            <BalanceAmount amount={wallet ? fmt(wallet.balance) : '…'} hidden={balanceHidden} onToggle={toggleBalance} />
+          </div>
+          <div className="wh-sub">🔒 Held (escrow): <b>{wallet ? (balanceHidden ? 'Rs ••••••' : fmt(wallet.held_amount)) : '…'}</b> — locked for active bookings</div>
         </div>
         <div className="wh-side">
           <div className="wh-trust">
@@ -96,11 +99,11 @@ export default function CustomerWallet() {
         </a>
         <Link className="card stat" to="/customer/withdraw" style={{ textDecoration: 'none' }}>
           <span className="value" style={{ fontSize: 20 }}>💸 Withdraw</span>
-          <span className="label">Apne mobile account par</span>
+          <span className="label">To your mobile account</span>
         </Link>
         <Link className="card stat" to="/customer/wallet/statement" style={{ textDecoration: 'none' }}>
           <span className="value" style={{ fontSize: 20 }}>🧾 Statement</span>
-          <span className="label">Har entry ke naam ke sath</span>
+          <span className="label">Every entry with names</span>
         </Link>
       </div>
 

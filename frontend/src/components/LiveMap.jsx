@@ -186,7 +186,7 @@ export default function LiveMap({ booking, role, token, onUpdate, refreshMs = 40
       {arrivedGps && (
         <div className="alert success arrival-banner">
           {isProView
-            ? '🎯 Your Destination is Here! Aap kaam ki jagah pohanch gaye hain — customer se OTP lein aur kaam shuru karein.'
+            ? '🎯 Your Destination is Here! You have arrived at the job location: take the OTP from the customer and start the work.'
             : `🎉 Khushkhabri! ${moverName} aap ke address pohanch gaye hain — wo aap se OTP mangen ge.`}
         </div>
       )}
@@ -205,8 +205,7 @@ export default function LiveMap({ booking, role, token, onUpdate, refreshMs = 40
       {/* STALE GPS WARNING — location 3+ min purani ho to (real apps jaisa)
           + manual fallback: pro apna Share location dabaye, customer ko maloom de */}
       {gpsStale && (
-        <div className="alert warn gps-stale-banner">
-          ⚠️ <b>{isProView ? 'Aap ki' : `${moverName} ki`} location {locAgeMin} min purani hai</b> — GPS band ya weak lagta hai.{' '}
+        <div className="alert warn gps-stale-banner">            ⚠️ <b>{isProView ? 'Your' : `${moverName}'s`} location is {locAgeMin} min old</b> — GPS may be off or weak.{' '}
           {isProView
             ? 'Neeche “🧭 Share location” dabayen taake customer ko live position dikhe.'
             : 'Professional se location share karwayen — ya wo apna GPS on kar ke app khole.'}
@@ -253,7 +252,7 @@ export default function LiveMap({ booking, role, token, onUpdate, refreshMs = 40
             </button>
           )}
           <button className={`btn small secondary ${gpsStale ? 'pulse' : ''}`} disabled={sharing} onClick={share}>
-            {sharing ? '⏳ Sharing…' : gpsStale ? '⚠️ GPS purana — Dobara Share Karein' : '🧭 Share location'}
+            {sharing ? '⏳ Sharing…' : gpsStale ? '⚠️ GPS stale — Share Again' : '🧭 Share location'}
           </button>
           {auto && <span className="muted" style={{ fontSize: 12.5 }}>Aap ka ➤ GPS se khud aage badhta rehta hai</span>}
         </div>

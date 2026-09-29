@@ -81,7 +81,7 @@ export default function ProBookingDetail() {
     setError(''); setMsg('');
     try {
       await api.post(`/professional/bookings/${id}/accept`, { arrival_minutes: offerForm.arrival_minutes ? Number(offerForm.arrival_minutes) : undefined }, token);
-      setMsg('Job accept ho gayi! Customer ko ETA bata di gayi hai.');
+      setMsg('Job accepted! Your ETA has been shared with the customer.');
       await load();
     } catch (e) { setError(e.message); }
   };
@@ -124,7 +124,7 @@ export default function ProBookingDetail() {
       {msg && <div className="alert warn">{msg}</div>}
 
       <ProIdentityCard profile={{ full_name: booking.customer_name, profile_photo: booking.customer_photo, trust_score: booking.customer_trust_score }} phone={booking.customer_phone} />
-      <p className="muted" style={{ marginTop: -10, marginBottom: 12, fontSize: 12.5 }}>↑ Kaam <b>karwaye wala = Customer</b> ({booking.customer_name}) · Aap professional hain — is kaam ko aap karenge.</p>
+      <p className="muted" style={{ marginTop: -10, marginBottom: 12, fontSize: 12.5 }}>↑ Booked by <b>Customer {booking.customer_name}</b> · You are the professional and will perform this job.</p>
       {error && <div className="alert error">{error}</div>}
 
       <div className="grid cols-2">
@@ -135,7 +135,7 @@ export default function ProBookingDetail() {
           <div className="divider" />
           <h2 style={{ marginBottom: 6 }}>🤝 Trust</h2>
           <p style={{ fontSize: 13.5 }}><b>{booking.customer_name}</b> · Trust Score <b style={{ color: 'var(--green-dark)' }}>{Number(booking.customer_trust_score ?? 100)}</b>/100 · {booking.customer_completed_jobs ?? 0} completed bookings</p>
-          <p className="muted" style={{ fontSize: 13 }}>Aap ka trust score: <b>{Number(booking.my_trust_score ?? 100)}</b>/100 — customer verified hai; payment escrow mein already held hai.</p>
+          <p className="muted" style={{ fontSize: 13 }}>Your trust score: <b>{Number(booking.my_trust_score ?? 100)}</b>/100 — customer is verified; payment is already held in escrow.</p>
 
           {/* Accept with arrival promise */}
           {booking.status === 'waiting_for_professional' && booking.offer_status !== 'pending' && (
@@ -149,7 +149,7 @@ export default function ProBookingDetail() {
           {/* Counter-offer: apni price batao */}
           {booking.status === 'waiting_for_professional' && booking.offer_status !== 'pending' && (
             <div className="mt" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-              <h2>💼 Apni Price Offer Karein (Counter-quote)</h2>
+              <h2>💼 Send Your Price Offer (Counter-quote)</h2>
               <p className="muted">The customer's budget is {fmt(booking.final_price)} — if you want a different price, send an offer; once the customer accepts, the deal is finalized.</p>
               <div className="row">
                 <input type="number" placeholder="Your price (Rs)" style={{ maxWidth: 160 }} value={offerForm.offered_price} onChange={(e) => setOfferForm({ ...offerForm, offered_price: e.target.value })} />

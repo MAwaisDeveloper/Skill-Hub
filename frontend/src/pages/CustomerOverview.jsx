@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatusBadge, Empty } from '../components/ui';
+import { StatusBadge, Empty, BalanceAmount, useBalanceHidden } from '../components/ui';
 
 export default function CustomerOverview() {
   const { session } = useApp();
@@ -11,6 +11,7 @@ export default function CustomerOverview() {
   const [wallet, setWallet] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [error, setError] = useState('');
+  const [balanceHidden, toggleBalance] = useBalanceHidden();
 
   useEffect(() => {
     Promise.all([
@@ -55,8 +56,8 @@ export default function CustomerOverview() {
       )}
 
       <div className="grid cols-4">
-        <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Wallet Balance</span><span className="hint">available to spend</span></div>
-        <div className="card stat"><span className="value">{fmt(wallet?.held_amount)}</span><span className="label">Held (Escrow)</span><span className="hint">locked for active jobs</span></div>
+        <div className="card stat"><span className="value"><BalanceAmount amount={fmt(wallet?.balance)} hidden={balanceHidden} onToggle={toggleBalance} /></span><span className="label">Wallet Balance</span><span className="hint">available to spend</span></div>
+        <div className="card stat"><span className="value">{balanceHidden ? 'Rs ••••••' : fmt(wallet?.held_amount)}</span><span className="label">Held (Escrow)</span><span className="hint">locked for active jobs</span></div>
         <div className="card stat"><span className="value">{active.length}</span><span className="label">Active Bookings</span><span className="hint">in progress now</span></div>
         <div className="card stat"><span className="value">{bookings.length}</span><span className="label">Total Bookings</span><span className="hint">all time</span></div>
       </div>
@@ -64,7 +65,7 @@ export default function CustomerOverview() {
       {/* Offers / late-arrival actions — deal yahin finalize hota hai */}
       {bookings.filter((b) => b.offer_status === 'pending' && b.status === 'waiting_for_professional').length > 0 && (
         <div className="card" style={{ borderLeft: '4px solid var(--gold)' }}>
-          <h2>💼 Pending Offers: Deal Finalize Karein</h2>
+          <h2>💼 Pending Offers: Finalize the Deal</h2>
           <p className="muted">Providers have sent price offers on your requests:</p>
           {bookings.filter((b) => b.offer_status === 'pending').map((b) => (
             <div className="row spread mb" key={b.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>

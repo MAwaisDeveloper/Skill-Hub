@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { DirBadge, Amt, Empty, InvoiceModal } from '../components/ui';
+import { DirBadge, Amt, Empty, InvoiceModal, BalanceAmount, useBalanceHidden } from '../components/ui';
 
 // Customer Withdraw: wallet → JazzCash/Easypaisa (admin transfer karta hai).
 // Same real flow as professional: name check -> request -> pending -> completed/rejected.
@@ -19,6 +19,7 @@ export default function CustomerWithdraw() {
   const [invoice, setInvoice] = useState(null);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [balanceHidden, toggleBalance] = useBalanceHidden();
 
   const load = async () => {
     try {
@@ -62,8 +63,8 @@ export default function CustomerWithdraw() {
       {error && <div className="alert error">{error}</div>}
 
       <div className="grid cols-3">
-        <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Available to Withdraw</span></div>
-        <div className="card stat"><span className="value">{fmt(wallet?.held_amount)}</span><span className="label">Held (Escrow)</span><span className="hint">withdraw nahi ho sakta</span></div>
+        <div className="card stat"><span className="value"><BalanceAmount amount={fmt(wallet?.balance)} hidden={balanceHidden} onToggle={toggleBalance} /></span><span className="label">Available to Withdraw</span></div>
+        <div className="card stat"><span className="value">{balanceHidden ? 'Rs ••••••' : fmt(wallet?.held_amount)}</span><span className="label">Held (Escrow)</span><span className="hint">cannot be withdrawn</span></div>
         <div className="card stat"><span className="value" style={{ fontSize: 18, paddingTop: 6 }}>Minimum Rs 500</span><span className="label">Per withdrawal</span></div>
       </div>
 
@@ -98,7 +99,7 @@ export default function CustomerWithdraw() {
             <label>Amount (Rs)</label>
             <input type="number" placeholder="min 500" min={500} value={amount} onChange={(e) => setAmount(e.target.value)} />
             {wallet && Number(wallet.balance) > 0 && (
-              <button className="btn small secondary" onClick={() => setAmount(String(Math.floor(Number(wallet.balance))))}>Poora balance ({fmt(Math.floor(Number(wallet.balance)))})</button>
+              <button className="btn small secondary" onClick={() => setAmount(String(Math.floor(Number(wallet.balance))))}>Full balance ({fmt(Math.floor(Number(wallet.balance)))})</button>
             )}
           </div>
         </div>
@@ -128,7 +129,7 @@ export default function CustomerWithdraw() {
       </div>
 
       {invoice && <InvoiceModal kind={invoice.kind} id={invoice.id} onClose={() => setInvoice(null)} />}
-      <p className="muted">Note: Booking payments sirf escrow se release hoti hain: yahan sirf apna available balance withdraw hota hai.</p>
+      <p className="muted">Note: Booking payments are only released from escrow. You can withdraw only your available balance here.</p>
     </Layout>
   );
 }

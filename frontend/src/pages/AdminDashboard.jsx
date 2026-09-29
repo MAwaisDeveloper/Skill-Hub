@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatusBadge, DirBadge, Amt, Pagination, Empty } from '../components/ui';
+import { StatusBadge, DirBadge, Amt, Pagination, Empty, BalanceAmount, useBalanceHidden, InvoiceModal } from '../components/ui';
 
 // Generic paged + filtered table used by all admin data tabs.
 // endpoint must return { rows, pagination }.
@@ -50,9 +50,277 @@ function PagedTable({ endpoint, filters = {}, columns, rowKey = (r) => r.id, emp
   );
 }
 
+// Expandable gateway receipt: ek transaction ki REAL JazzCash/Easypaisa detail
+// (icon/click par khulta hai) — provider account balance, holder, OTP, TID.
+function PaReceipt({ row, onClose }) {
+  const { session } = useApp();
+  const token = session?.token;
+  const [wallets, setWallets] = useState(null);
+  useEffect(() => {
+    api.get('/admin/gateway/wallets', token).then((d) => setWallets(d.rows || [])).catch(() => setWallets([]));
+  }, []);
+  const pw = (wallets || []).find((w) => w.provider === row.provider && w.account_number === row.account_number);
+  const isJazz = row.provider === 'jazzcash';
+  return (
+    <div className={`card gateway ${isJazz ? 'gw-jazzcash' : 'gw-easypaisa'}`} style={{ maxWidth: 460, margin: '10px auto' }}>
+      <div className={`gw-head ${isJazz ? 'gw-head-jazz' : 'gw-head-easy'}`}>
+        <div className="gw-logo">{isJazz ? 'JazzCash' : 'easypaisa'}</div>
+        <div className="gw-lock">🔒 Gateway Record</div>
+      </div>
+      <button className="btn small secondary" style={{ float: 'right', marginTop: -44 }} onClick={onClose}>✕</button>
+      <div className="gw-amount" style={{ fontSize: 26 }}><Amt value={row.amount} dir={row.kind === 'topup' ? 'in' : 'out'} /></div>
+      <div className="kv">
+        <span className="k">Type</span><span>{row.kind === 'topup' ? 'Wallet Top-up' : row.kind === 'withdrawal' ? 'Wallet Withdrawal' : 'Admin Gateway Cut'}</span>
+        <span className="k">From / To</span><span>{isJazz ? 'JazzCash' : 'Easypaisa'} · {row.account_number}</span>
+        <span className="k">Account Holder</span><span><b>{row.account_title || pw?.account_title || 'Not set'}</b></span>
+        <span className="k">Holder Source</span><span>{row.title_source || '—'}</span>
+        <span className="k">OTP (entered by user)</span><span className="badge status">{row.pin_code || '—'}</span>
+        <span className="k">Gateway Reference</span><span>{row.reference || '—'}</span>
+        <span className="k">Status</span><span><DirBadge dir={row.status === 'completed' || row.status === 'success' ? 'in' : row.status === 'pending' ? 'pending' : 'out'} label={row.status} /></span>
+      </div>
+      <div className="kv" style={{ marginTop: 10, borderTop: '1px dashed var(--border)', paddingTop: 10 }}>
+        <span className="k"> REAL {isJazz ? 'JazzCash' : 'Easypaisa'} balance</span>
+        <span>{pw ? <b style={{ color: 'var(--green-dark)' }}>{fmt(pw.balance)}</b> : <span className="muted">loading…</span>}</span>
+        <span className="k">Hunar wallet (user)</span>
+        <span className="muted">{fmt(row.user_balance)}</span>
+        <span className="k">When</span><span>{String(row.created_at).slice(0, 19)}</span>
+      </div>
+      <p className="muted mt" style={{ fontSize: 12 }}>Real mobile-account balance provider_wallets se aata hai (simulated bank side) — Hunar wallet balance nahi.</p>
+    </div>
+  );
+}
+
+// Admin Gateway Console: real mobile account se OTP ke zariye paise cut karna
+function GatewayConsole() {
+  const { session } = useApp();
+  const token = session?.token;
+  const [wallets, setWallets] = useState(null);
+  const [form, setForm] = useState({ provider: 'jazzcash', account_number: '', amount: '' });
+  const [step, setStep] = useState('form'); // form | otp | done
+  const [otp, setOtp] = useState('');
+  const [devOtp, setDevOtp] = useState(null);
+  const [result, setResult] = useState(null);
+  const [credit, setCredit] = useState({ provider: 'jazzcash', account_number: '', amount: '' });
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const load = () => api.get('/admin/gateway/wallets', token).then((d) => setWallets({ rows: d.rows || [], summary: d.summary })).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, []);
+
+  const initiate = async () => {
+    setError(''); setMsg('');
+    try {
+      const res = await api.post('/admin/gateway/cut/initiate', { provider: form.provider, account_number: form.account_number.trim(), amount: Number(form.amount) }, token);
+      setDevOtp(res.dev_otp || null);
+      setStep('otp');
+      setMsg(res.message);
+      load();
+    } catch (e) { setError(e.message); }
+  };
+
+  const confirm = async () => {
+    setError(''); setMsg('');
+    try {
+      const res = await api.post('/admin/gateway/cut/confirm', { provider: form.provider, account_number: form.account_number.trim(), amount: Number(form.amount), otp }, token);
+      setResult(res);
+      setStep('done');
+      setMsg(`✅ Cut complete: ${fmt(res.amount)} from ${res.provider} ${res.account_number}. New balance: ${fmt(res.balance_after)}`);
+      load();
+    } catch (e) { setError(e.message); }
+  };
+
+  const doCredit = async () => {
+    setError(''); setMsg('');
+    try {
+      const res = await api.post('/admin/gateway/credit', { provider: credit.provider, account_number: credit.account_number.trim(), amount: Number(credit.amount) }, token);
+      setMsg(`✅ Mobile account credited: new balance ${fmt(res.balance)}`);
+      setCredit({ provider: 'jazzcash', account_number: '', amount: '' });
+      load();
+    } catch (e) { setError(e.message); }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <h2>🏦 Gateway Console — Real Mobile Accounts (OTP-authorized cuts)</h2>
+      <p className="muted mb">Real JazzCash/Easypaisa mobile-account balances (provider_wallets). Admin cut bhi user topup jaisa hi hai: OTP mobile account par jata hai, OTP enter karne par paise cut hote hain. Ye Hunar wallet se alag cheez hai.</p>
+      {msg && <div className="alert success">{msg}</div>}
+      {error && <div className="alert error">{error}</div>}
+
+      <div className="grid cols-4" style={{ marginBottom: 12 }}>
+        {(wallets?.rows || []).slice(0, 3).map((w) => (
+          <div className="card stat" key={w.id}><span className="value" style={{ fontSize: 20 }}>{fmt(w.balance)}</span><span className="label">{w.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} · {w.account_number}</span><span className="hint">{w.account_title || 'holder not set'} · {w.linked_users} user(s)</span></div>
+        ))}
+        <div className="card stat"><span className="value" style={{ fontSize: 20 }}>{wallets ? fmt(Number(wallets.summary?.jazzcash_total || 0) + Number(wallets.summary?.easypaisa_total || 0)) : '…'}</span><span className="label">All Mobile Accounts</span><span className="hint">{wallets ? `${wallets.summary?.accounts} accounts` : ''}</span></div>
+      </div>
+
+      <div className="grid cols-2" style={{ gap: 16 }}>
+        <div>
+          <h3 style={{ fontSize: 15 }}>✂️ Cut money (same OTP flow)</h3>
+          {step !== 'done' ? (
+            <>
+              <div className="grid cols-2" style={{ gap: 10 }}>
+                <div>
+                  <label>Provider</label>
+                  <select value={form.provider} onChange={(e) => { setForm({ ...form, provider: e.target.value }); setStep('form'); }}>
+                    <option value="jazzcash">JazzCash</option>
+                    <option value="easypaisa">Easypaisa</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Amount</label>
+                  <input type="number" min={1} placeholder="e.g. 1000" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+                </div>
+              </div>
+              <label>Mobile Account Number (03...)</label>
+              <div className="row">
+                <input placeholder="03XXXXXXXXX" maxLength={11} value={form.account_number} onChange={(e) => { setForm({ ...form, account_number: e.target.value }); setStep('form'); }} />
+                {step === 'form'
+                  ? <button className="btn" onClick={initiate} disabled={!form.account_number || !form.amount}>📱 Send OTP</button>
+                  : null}
+              </div>
+              {step === 'otp' && (
+                <div className="mt">
+                  {devOtp && <div className="alert warn">Dev OTP: <b>{devOtp}</b> (sent to {form.account_number})</div>}
+                  <div className="row">
+                    <input className="otp-input" style={{ maxWidth: 160 }} placeholder="OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                    <button className="btn" onClick={confirm} disabled={otp.length < 4}>✂️ Verify & Cut</button>
+                    <button className="btn secondary" onClick={() => { setStep('form'); setOtp(''); }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="kv">
+              <span className="k">Reference</span><span>{result?.reference}</span>
+              <span className="k">Cut</span><span><b>{fmt(result?.amount)}</b></span>
+              <span className="k">Account</span><span>{result?.provider} {result?.account_number} ({result?.account_title || '—'})</span>
+              <span className="k">Balance After</span><span><b style={{ color: 'var(--green-dark)' }}>{fmt(result?.balance_after)}</b></span>
+              <button className="btn secondary small mt" onClick={() => { setStep('form'); setResult(null); setForm({ provider: 'jazzcash', account_number: '', amount: '' }); }}>New cut</button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ borderLeft: '1px dashed var(--border)', paddingLeft: 16 }}>
+          <h3 style={{ fontSize: 15 }}>➕ Credit mobile account (simulate app top-up)</h3>
+          <p className="muted" style={{ fontSize: 12 }}>User ke mobile account mein balance dalo (dev testing ke liye) — phir user OTP topup kar sakega.</p>
+          <div className="grid cols-2" style={{ gap: 10 }}>
+            <div>
+              <label>Provider</label>
+              <select value={credit.provider} onChange={(e) => setCredit({ ...credit, provider: e.target.value })}>
+                <option value="jazzcash">JazzCash</option>
+                <option value="easypaisa">Easypaisa</option>
+              </select>
+            </div>
+            <div>
+              <label>Amount</label>
+              <input type="number" min={1} placeholder="e.g. 5000" value={credit.amount} onChange={(e) => setCredit({ ...credit, amount: e.target.value })} />
+            </div>
+          </div>
+          <label>Mobile Number (03...)</label>
+          <div className="row">
+            <input placeholder="03XXXXXXXXX" maxLength={11} value={credit.account_number} onChange={(e) => setCredit({ ...credit, account_number: e.target.value })} />
+            <button className="btn secondary" onClick={doCredit} disabled={!credit.account_number || !credit.amount}>Credit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Provider Accounts tab (CONFIDENTIAL — admin only). Real JazzCash/Easypaisa
+// account details (provider_wallets balances via receipt), OTP, holder, references.
+function PaTab({ filters, setFilters, balanceHidden }) {
+  const { session } = useApp();
+  const token = session?.token;
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [openRow, setOpenRow] = useState(null); // row id -> receipt open
+  useEffect(() => {
+    let live = true;
+    const q = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v !== '' && v != null && v !== undefined) q.set(k, v); });
+    if (!q.get('per_page')) q.set('per_page', 15);
+    api.get(`/admin/provider-accounts?${q.toString()}`, token)
+      .then((d) => { if (live) setData(d); })
+      .catch((e) => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [JSON.stringify(filters)]);
+
+  const s = data?.summary;
+  return (
+    <>
+      <div className="alert info" style={{ marginBottom: 12 }}>
+        🔒 Confidential: real mobile-account numbers, holders, OTPs and gateway references.
+        Visible to administrators only — customers and professionals never see this.
+      </div>
+      <GatewayConsole />
+      <div className="grid cols-4" style={{ marginBottom: 12 }}>
+        <div className="card stat"><span className="value td-amt-in">{s ? `+ ${fmt(s.total_topups)}` : '…'}</span><span className="label">Total Top-ups (all users)</span><span className="hint">money received via JazzCash/Easypaisa</span></div>
+        <div className="card stat"><span className="value td-amt-out">{s ? `− ${fmt(s.total_withdrawals)}` : '…'}</span><span className="label">Total Withdrawals (all users)</span><span className="hint">paid out to provider accounts</span></div>
+        <div className="card stat"><span className="value">{s ? s.total_records : '…'}</span><span className="label">Account Records</span><span className="hint">every top-up / withdrawal / admin cut</span></div>
+        <div className="card stat"><span className="value">{s ? (s.total_accounts ?? '—') : '…'}</span><span className="label">Distinct Accounts Used</span><span className="hint">unique provider numbers across all users</span></div>
+      </div>
+      <div className="card">
+        <h2>Provider Account Records (click 🧾 icon for real gateway detail)</h2>
+        <div className="filters">
+          <select value={filters.kind} onChange={(e) => setFilters({ ...filters, kind: e.target.value })}>
+            <option value="">All Types</option>
+            <option value="topup">Top-up</option>
+            <option value="withdrawal">Withdrawal</option>
+            <option value="admin_cut">Admin Cut</option>
+          </select>
+          <select value={filters.provider} onChange={(e) => setFilters({ ...filters, provider: e.target.value })}>
+            <option value="">All Providers</option>
+            <option value="jazzcash">JazzCash</option>
+            <option value="easypaisa">Easypaisa</option>
+          </select>
+          <input placeholder="Search number / holder / user / phone" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
+        </div>
+      </div>
+      {error && <div className="alert error">{error}</div>}
+      {!data && <div className="card"><p className="muted">Loading…</p></div>}
+      {data && data.rows.length === 0 && <div className="card"><Empty>No provider account records yet. Records appear when users top up or withdraw.</Empty></div>}
+      {data && data.rows.length > 0 && (
+        <div className="card">
+          <table>
+            <thead>
+              <tr><th></th><th>Date</th><th>User</th><th>Type</th><th>Provider</th><th>Account Number</th><th>Account Holder</th><th>Amount</th><th>OTP</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r) => (
+                <React.Fragment key={r.id}>
+                  <tr>
+                    <td><button className="btn small secondary" title="Real gateway detail" onClick={() => setOpenRow(openRow === r.id ? null : r.id)}>🧾</button></td>
+                    <td>{String(r.created_at).slice(0, 16)}</td>
+                    <td><b>{r.user_name || '—'}</b><div className="muted">{r.phone}</div></td>
+                    <td><DirBadge dir={r.kind === 'topup' ? 'in' : 'out'} label={r.kind} /></td>
+                    <td><span className="badge status">{r.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'}</span></td>
+                    <td><b>{r.account_number}</b></td>
+                    <td>{r.account_title || '—'}{r.title_source && <div className="muted" style={{ fontSize: 12 }}>{r.title_source}</div>}</td>
+                    <td><Amt value={r.amount} dir={r.kind === 'topup' ? 'in' : 'out'} /></td>
+                    <td>{r.pin_code ? <span className="badge status">{r.pin_code}</span> : '—'}</td>
+                    <td><DirBadge dir={r.status === 'completed' || r.status === 'success' ? 'in' : r.status === 'pending' ? 'pending' : 'out'} label={r.status} /></td>
+                  </tr>
+                  {openRow === r.id && (
+                    <tr>
+                      <td colSpan={10} style={{ background: 'var(--bg, #fafafa)' }}>
+                        <PaReceipt row={r} onClose={() => setOpenRow(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+          <Pagination pagination={data.pagination} onPage={(p) => setFilters({ ...filters, page: p })} />
+        </div>
+      )}
+    </>
+  );
+}
+
 // Tabs are URL-driven (/admin?tab=transactions): every sidebar section opens directly,
 // the active section is bookmarkable, and browser back/forward works naturally.
-const VALID_TABS = ['overview', 'verifications', 'bookings', 'disputes', 'wallets', 'transactions', 'topups', 'penalties', 'refunds', 'messages', 'payouts', 'users', 'reports', 'settings'];
+const VALID_TABS = ['overview', 'verifications', 'bookings', 'disputes', 'wallets', 'transactions', 'topups', 'provider_accounts', 'penalties', 'refunds', 'messages', 'payouts', 'users', 'reports', 'settings'];
 const TAB_TITLES = {
   overview: 'Admin Overview',
   verifications: 'Verification Queue',
@@ -61,6 +329,7 @@ const TAB_TITLES = {
   wallets: 'User Wallets',
   transactions: 'All Wallet Transactions',
   topups: 'Wallet Top-ups',
+  provider_accounts: 'Provider Accounts (Confidential)',
   penalties: 'Professional Penalties',
   refunds: 'Refund Records',
   messages: 'Flagged Messages',
@@ -79,6 +348,7 @@ export default function AdminDashboard() {
   const tab = VALID_TABS.includes(requestedTab) ? requestedTab : 'overview';
   const setTab = (t) => navigate(`/admin?tab=${t}`);
   const [stats, setStats] = useState(null);
+  const [balanceHidden, toggleBalance] = useBalanceHidden();
   const [queue, setQueue] = useState([]);
   const [disputes, setDisputes] = useState([]);
   const [commissions, setCommissions] = useState([]);
@@ -90,6 +360,8 @@ export default function AdminDashboard() {
   const [txnFilters, setTxnFilters] = useState({ user_id: '', type: '', direction: '', from: '', to: '' });
   const [walletFilters, setWalletFilters] = useState({ role: '', q: '' });
   const [topupFilters, setTopupFilters] = useState({ status: '', provider: '' });
+  const [paFilters, setPaFilters] = useState({ kind: '', provider: '', q: '' });
+  const [paSummary, setPaSummary] = useState(null);
   const [penaltyFilters, setPenaltyFilters] = useState({ settled: '' });
   const [msgFilter, setMsgFilter] = useState({ flagged: '' });
   const [selectedWalletUser, setSelectedWalletUser] = useState(null);
@@ -97,6 +369,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [wdNote, setWdNote] = useState({});   // withdrawal id -> note text (inline input)
   const [wdAction, setWdAction] = useState({}); // withdrawal id -> 'complete' | 'rejected' (confirm pending)
+  const [invoice, setInvoice] = useState(null); // { kind, id, reference } for InvoiceModal
   const [resolution, setResolution] = useState({}); // dispute id -> { outcome, admin_note }
 
   const load = async () => {
@@ -172,7 +445,9 @@ export default function AdminDashboard() {
               <div style={{ fontSize: 34 }}>🏦</div>
               <div style={{ flex: 1 }}>
                 <div className="muted">Platform Service Charges Wallet (platform revenue)</div>
-                <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--green-deep)' }}>{fmt(stats.platform_balance ?? 0)}</div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--green-deep)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <BalanceAmount amount={fmt(stats.platform_balance ?? 0)} hidden={balanceHidden} onToggle={toggleBalance} />
+                </div>
               </div>
               <div style={{ textAlign: 'right', fontSize: 13 }} className="muted">
                 <div>Service charges from bookings + contract milestones<br />Credited automatically on every release</div>
@@ -426,6 +701,12 @@ export default function AdminDashboard() {
         </>
       )}
 
+      {/* Provider account details (JazzCash/Easypaisa) — CONFIDENTIAL: admin only.
+          Customer/professional endpoints never return this data. */}
+      {tab === 'provider_accounts' && (
+        <PaTab filters={paFilters} setFilters={setPaFilters} balanceHidden={balanceHidden} />
+      )}
+
       {tab === 'penalties' && (
         <>
           <div className="card">
@@ -537,6 +818,7 @@ export default function AdminDashboard() {
                           )
                         )}
                         {w.admin_note && <div className="muted">{w.admin_note}</div>}
+                        <button className="btn small secondary mt" onClick={() => setInvoice({ kind: 'withdrawal', id: w.id })}>🧾 Invoice</button>
                       </td>
                     </tr>
                   ))}
@@ -623,6 +905,8 @@ export default function AdminDashboard() {
           </table>
         </div>
       )}
+
+      {invoice && <InvoiceModal kind={invoice.kind} id={invoice.id} reference={invoice.reference} onClose={() => setInvoice(null)} />}
     </Layout>
   );
 }

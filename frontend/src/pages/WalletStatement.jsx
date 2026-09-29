@@ -29,7 +29,7 @@ export default function WalletStatement() {
       <StatementView
         fetcher={fetchStatement}
         title="Complete Ledger"
-        subtitle="Incoming, outgoing aur pending — JazzCash statement ki tarah. Direction, type ya date range se filter karein."
+        subtitle="Incoming, outgoing and pending, like a bank statement. Filter by direction, type or date range."
       />
     </Layout>
   );

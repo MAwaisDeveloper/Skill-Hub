@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatusBadge, MoneyFlow, Empty } from '../components/ui';
+import { StatusBadge, MoneyFlow, Empty, BalanceAmount, useBalanceHidden } from '../components/ui';
 
 // Pro identity card — dashboard par apna naam, photo, phone (sab kuch ek jagah)
 // (booking detail par customer ke liye bhi reuse hota hai — rating optional)
@@ -35,6 +35,7 @@ export default function ProfessionalOverview() {
   const [wallet, setWallet] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [error, setError] = useState('');
+  const [balanceHidden, toggleBalance] = useBalanceHidden();
 
   useEffect(() => {
     Promise.all([
@@ -73,7 +74,7 @@ export default function ProfessionalOverview() {
       <div className="grid cols-4">
         <div className="card stat"><span className="value">{stats.new_requests}</span><span className="label">New Requests</span><span className="hint">waiting for your response</span></div>
         <div className="card stat"><span className="value">{stats.active_jobs}</span><span className="label">Active Jobs</span><span className="hint">accepted & in progress</span></div>
-        <div className="card stat"><span className="value">{fmt(wallet?.balance)}</span><span className="label">Wallet Balance</span><span className="hint">yours to withdraw</span></div>
+        <div className="card stat"><span className="value"><BalanceAmount amount={fmt(wallet?.balance)} hidden={balanceHidden} onToggle={toggleBalance} /></span><span className="label">Wallet Balance</span><span className="hint">yours to withdraw</span></div>
         <div className="card stat"><span className="value">{fmt(stats.total_earned)}</span><span className="label">Lifetime Earnings</span><span className="hint">after 0% service charges (free launch offer)</span></div>
       </div>
 

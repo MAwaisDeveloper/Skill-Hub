@@ -2,7 +2,7 @@ const { pool, withTransaction } = require('../config/db');
 const { HttpError } = require('../middleware/error');
 const { lookupAccountTitle } = require('./lookup.service');
 const walletService = require('./wallet.service');
-const gatewayService = require('./gateway.service');
+const gatewayService = require('./payout-gateway.service');
 const { notify } = require('../utils/helpers');
 
 // Request a withdrawal: money leaves wallet immediately (held until admin
@@ -30,6 +30,18 @@ async function requestWithdrawal(userId, role, { amount, provider, account_numbe
       [userId, role, provider, account_number, title.account_title, amount]
     );
     const withdrawalId = res.insertId;
+    // Provider account record (admin-only): kis number par, kis ke naam par paisa jayega
+    await walletService.recordProviderAccount(conn, {
+      userId,
+      provider,
+      accountNumber: account_number,
+      accountTitle: title.account_title,
+      titleSource: title.source,
+      kind: 'withdrawal',
+      amount,
+      reference: `WDR-${String(withdrawalId).padStart(6, '0')}`,
+      status: 'pending',
+    });
     return { withdrawal_id: withdrawalId, amount, to: `${title.account_title} (${account_number})`, status: 'pending' };
   });
 }
@@ -62,6 +74,11 @@ async function autoDisburse(withdrawalId) {
     const [again] = await conn.query(`SELECT * FROM withdrawals WHERE id = ? FOR UPDATE`, [wd.id]);
     if (again[0].status !== 'pending') return { status: again[0].status };
     await conn.query(`UPDATE withdrawals SET status = 'completed', processed_at = NOW(), admin_note = ? WHERE id = ?`, [note, wd.id]);
+    // Provider account record completed mark + gateway TID save
+    await conn.query(
+      `UPDATE provider_accounts SET status = 'completed', reference = ? WHERE user_id = ? AND kind = 'withdrawal' AND account_number = ? AND amount = ? AND status = 'pending'`,
+      [gw.gateway_transaction_id, wd.user_id, wd.account_number, wd.amount]
+    );
     await notify(wd.user_id, 'payout', `Withdrawal Rs ${wd.amount} completed → ${wd.account_title} (${wd.provider} ${wd.account_number}) · TID ${gw.gateway_transaction_id}`);
     return { status: 'completed', tid: gw.gateway_transaction_id };
   });
@@ -87,10 +104,18 @@ async function adminResolve(id, action, adminNote) {
     if (wd.status !== 'pending') throw new HttpError(400, 'Already processed');
     if (action === 'complete') {
       await conn.query(`UPDATE withdrawals SET status = 'completed', processed_at = NOW(), admin_note = ? WHERE id = ?`, [adminNote || null, id]);
+      await conn.query(
+        `UPDATE provider_accounts SET status = 'completed' WHERE user_id = ? AND kind = 'withdrawal' AND account_number = ? AND amount = ? AND status = 'pending'`,
+        [wd.user_id, wd.account_number, wd.amount]
+      );
       await notify(wd.user_id, 'payout', `Withdrawal Rs ${wd.amount} completed → ${wd.account_title} (${wd.provider} ${wd.account_number})`);
       return { status: 'completed' };
     }
     // reject → refund money back
+    await conn.query(
+      `UPDATE provider_accounts SET status = 'failed' WHERE user_id = ? AND kind = 'withdrawal' AND account_number = ? AND amount = ? AND status = 'pending'`,
+      [wd.user_id, wd.account_number, wd.amount]
+    );
     const [wallets] = await conn.query(`SELECT * FROM wallets WHERE user_id = ? FOR UPDATE`, [wd.user_id]);
     await conn.query(`UPDATE wallets SET balance = balance + ? WHERE id = ?`, [wd.amount, wallets[0].id]);
     const [after] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [wallets[0].id]);

@@ -10,7 +10,7 @@ export default function Login() {
   const { login } = useApp();
   const navigate = useNavigate();
   const loc = useLocation();
-  const [tab, setTab] = useState('password'); // password | otp | admin | forgot
+  const [tab, setTab] = useState('password'); // password | admin | forgot
   const [form, setForm] = useState({ email: '', password: '' });
   const [otp, setOtp] = useState('');
   const [otpSentTo, setOtpSentTo] = useState('');
@@ -44,7 +44,7 @@ export default function Login() {
   };
 
   const passwordLogin = async () => {
-    const emailErr = validateEmail(form.email);
+    const emailErr = !form.email.trim() ? 'Email is required.' : validateEmail(form.email);
     const pwdErr = !form.password ? 'Password is required.' : '';
     setFieldErr({ email: emailErr, password: pwdErr });
     if (emailErr || pwdErr) return;
@@ -52,28 +52,13 @@ export default function Login() {
     if (data) { saveSession(data); login(data); go(data.user.role); }
   };
 
-  const requestOtp = async () => {
-    const emailErr = validateEmail(form.email);
-    setFieldErr({ email: emailErr });
-    if (emailErr) return;
-    const res = await wrap(() => api.post('/auth/otp/request', { email: form.email.trim() }));
-    if (res) { setDevOtp(res.dev_otp || null); setOtpSentTo(res.sent_to || form.email.trim()); setMsg('OTP sent to your email. Enter it below to sign in.'); }
-  };
-
-  const verifyOtp = async () => {
-    if (otp.length < 6) { setFieldErr({ otp: 'Enter the complete 6-digit code.' }); return; }
-    setFieldErr({});
-    const data = await wrap(() => api.post('/auth/otp/verify', { email: form.email.trim(), otp }));
-    if (data) { saveSession(data); login(data); go(data.user.role); }
-  };
-
   const adminLogin = async () => {
     const idf = form.email.trim();
-    const idErr = idf.includes('@') ? validateEmail(idf) : (!idf ? 'Phone or email required.' : '');
+    const idErr = !idf ? 'Admin email is required.' : validateEmail(idf);
     const pwdErr = !form.password ? 'Password is required.' : '';
     setFieldErr({ email: idErr, password: pwdErr });
     if (idErr || pwdErr) return;
-    const data = await wrap(() => api.post('/auth/admin/login', { phone: idf, password: form.password }));
+    const data = await wrap(() => api.post('/auth/admin/login', { email: idf, password: form.password }));
     if (data) { saveSession(data); login(data); go('admin'); }
   };
 
@@ -139,7 +124,7 @@ export default function Login() {
           ) : tab === 'admin' ? (
             <>
               <h1>Administrator sign in</h1>
-              <p className="sub">Platform management access</p>
+              <p className="sub">Platform management access, by admin email</p>
             </>
           ) : (
             <>
@@ -154,7 +139,6 @@ export default function Login() {
           {tab !== 'forgot' && (
             <div className="tabs">
               <button className={`tab ${tab === 'password' ? 'active' : ''}`} onClick={() => { setTab('password'); setFieldErr({}); setError(''); setMsg(''); }}>Email & Password</button>
-              <button className={`tab ${tab === 'otp' ? 'active' : ''}`} onClick={() => { setTab('otp'); setFieldErr({}); setError(''); setMsg(''); }}>Email OTP</button>
               <button className={`tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setFieldErr({}); setError(''); setMsg(''); }}>Admin</button>
             </div>
           )}
@@ -191,6 +175,12 @@ export default function Login() {
                 <a href="#" className="muted" style={{ fontSize: 13 }} onClick={(e) => { e.preventDefault(); setTab('forgot'); setFieldErr({}); setMsg(''); setError(''); }}>Forgot password?</a>
               </div>
               <button className="btn btn-block btn-lg" onClick={passwordLogin} disabled={busy}>{busy ? 'Signing in…' : 'Sign In'}</button>
+              <div className="alert info mt" style={{ fontSize: 13 }}>
+                <b>Demo accounts:</b><br />
+                Customer — <b>ali@example.com</b> / <b>Customer@123</b><br />
+                Professional — <b>sajjad@example.com</b> / <b>Provider@123</b><br />
+                Forgot your password? Use <b>Forgot password?</b> above: we email you a code, you set a new password.
+              </div>
               <div className="auth-alt mt">
                 <b>Don't have an account yet?</b>
                 <span className="muted">Join thousands of verified users and get started today.</span>
@@ -200,52 +190,15 @@ export default function Login() {
             </>
           )}
 
-          {tab === 'otp' && (
+          {tab === 'admin' && (
             <>
-              <div className="label-row"><label>Email Address</label><Count v={form.email} max={254} /></div>
+              <div className="label-row"><label>Admin Email</label><Count v={form.email} max={254} /></div>
               <input
                 className={fieldErr.email ? 'invalid' : ''}
                 value={form.email}
                 onChange={setF('email', (v) => v.trim(), 254)}
-                placeholder="ali@gmail.com"
+                placeholder="admin@hunar.pk"
                 inputMode="email"
-                disabled={!!otpSentTo && !msg.includes('sent')}
-                autoFocus
-              />
-              {errMsg('email')}
-              {!otpSentTo ? (
-                <button className="btn btn-block btn-lg" onClick={requestOtp} disabled={busy || !form.email}>{busy ? 'Sending…' : 'Send OTP to Email'}</button>
-              ) : (
-                <>
-                  {devOtp && <div className="alert warn">Dev OTP: <b>{devOtp}</b> (email delivery integration pending)</div>}
-                  <div className="label-row" style={{ marginTop: 8 }}><label>Enter 6-digit OTP</label><Count v={otp} max={6} /></div>
-                  <input
-                    className={`otp-input ${fieldErr.otp ? 'invalid' : ''}`}
-                    value={otp}
-                    onChange={(e) => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setFieldErr((f) => ({ ...f, otp: '' })); }}
-                    placeholder="••••••"
-                    maxLength={6}
-                    inputMode="numeric"
-                    onKeyDown={(e) => e.key === 'Enter' && verifyOtp()}
-                    autoFocus
-                  />
-                  {errMsg('otp')}
-                  <button className="btn btn-block btn-lg" onClick={verifyOtp} disabled={busy || otp.length < 6}>{busy ? 'Verifying…' : 'Verify & Sign In'}</button>
-                  <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setOtpSentTo(''); setOtp(''); setMsg(''); }}>← Change email / resend</a></p>
-                </>
-              )}
-              <p className="muted mt">Prefer a password? Switch to the <b>Email & Password</b> tab. <Link to="/register">Create an account</Link></p>
-            </>
-          )}
-
-          {tab === 'admin' && (
-            <>
-              <label>Admin Phone or Email</label>
-              <input
-                className={fieldErr.email ? 'invalid' : ''}
-                value={form.email}
-                onChange={setF('email', null, 254)}
-                placeholder="03000000000"
                 autoFocus
               />
               {errMsg('email')}
@@ -259,7 +212,7 @@ export default function Login() {
               />
               {errMsg('password')}
               <button className="btn btn-block btn-lg" onClick={adminLogin} disabled={busy}>{busy ? 'Signing in…' : 'Sign in as Administrator'}</button>
-              <p className="muted mt">Demo: 03000000000 / Admin@123</p>
+              <p className="muted mt">Demo: admin@hunar.pk / Admin@123</p>
             </>
           )}
 

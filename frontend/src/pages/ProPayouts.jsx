@@ -26,7 +26,7 @@ export default function ProPayouts() {
 
       <div className="card">
         <h2>💰 Job Payouts (90% of each deal)</h2>
-        {payouts.length === 0 && <Empty icon="💰">Abhi koi payout nahi. Jobs complete karein: release par payout yahan aayega.</Empty>}
+        {payouts.length === 0 && <Empty icon="💰">No payouts yet. Complete jobs: each release creates a payout here.</Empty>}
         {payouts.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>Booking</th><th>Amount</th><th>Status</th><th></th></tr></thead>
@@ -47,7 +47,7 @@ export default function ProPayouts() {
 
       <div className="card">
         <h2>💸 Withdrawal Requests</h2>
-        {withdrawals.length === 0 && <Empty icon="💸">Koi withdrawal request nahi. <b>My Wallet → Earnings &amp; Withdraw</b> se request karein.</Empty>}
+        {withdrawals.length === 0 && <Empty icon="💸">No withdrawal requests yet. Request one from <b>My Wallet → Earnings &amp; Withdraw</b>.</Empty>}
         {withdrawals.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>To</th><th>Amount</th><th>Status</th><th>Admin Note</th><th></th></tr></thead>

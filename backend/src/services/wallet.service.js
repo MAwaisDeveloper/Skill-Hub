@@ -2,6 +2,20 @@ const { pool, withTransaction } = require('../config/db');
 const { HttpError } = require('../middleware/error');
 const { getSettings, notify: notifyHelper } = require('../utils/helpers');
 
+// ---------- Provider account records (ADMIN-ONLY visibility) ----------
+// Har JazzCash/Easypaisa movement (top-up ya withdrawal) par user ka provider
+// account snapshot store hota hai: number, provider, account title (kis ke naam
+// par hai), amount aur reference. Ye data sirf admin panel mein dikhta hai:
+// customer/professional apne statement mein sirf apna ledger dekhte hain.
+async function recordProviderAccount(conn, { userId, provider, accountNumber, accountTitle = null, titleSource = null, kind, amount, reference = null, pinCode = null, status = 'pending' }) {
+  const [u] = await conn.query(`SELECT role FROM users WHERE id = ?`, [userId]);
+  await conn.query(
+    `INSERT INTO provider_accounts (user_id, role, provider, account_number, account_title, title_source, kind, amount, reference, pin_code, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [userId, u[0]?.role || 'customer', provider, accountNumber, accountTitle, titleSource, kind, amount, reference, pinCode, status]
+  );
+}
+
 // ---------- Core ledger helpers ----------
 
 // Platform revenue: admin user ke wallet mein commission credit (real money flow)
@@ -61,6 +75,7 @@ async function getTransactions(userId) {
               WHEN t.type = 'payout' THEN 'Customer'
               WHEN t.type = 'topup' THEN 'JazzCash/Easypaisa Top-up'
               WHEN t.type = 'compensation' THEN 'Customer cancellation compensation'
+              WHEN t.type = 'withdrawal' THEN 'JazzCash/Easypaisa Withdrawal'
               WHEN t.type = 'commission' THEN 'Platform'
               WHEN t.type = 'penalty' THEN 'Platform (Penalty)'
               ELSE 'Platform'
@@ -128,6 +143,32 @@ async function completeTopup({ reference, success = true }) {
     await conn.query(
       `INSERT INTO payments (user_id, amount, payment_method, transaction_ref, status) VALUES (?, ?, ?, ?, 'success')`,
       [topup.user_id, topup.amount, topup.provider, reference]
+    );
+    // Provider account record (admin-only visibility): jis number se paisa aaya,
+    // kis ke naam par hai (real mobile-account title), OTP jo user ne dala
+    const [pw] = await conn.query(`SELECT account_title, balance FROM provider_wallets WHERE provider = ? AND account_number = ?`, [topup.provider, topup.mobile_number]);
+    const { lookupAccountTitle } = require('./lookup.service');
+    const lookup = pw[0]?.account_title
+      ? { found: true, account_title: pw[0].account_title, source: 'Mobile account (real holder)' }
+      : await lookupAccountTitle(topup.provider, topup.mobile_number);
+    await recordProviderAccount(conn, {
+      userId: topup.user_id,
+      provider: topup.provider,
+      accountNumber: topup.mobile_number,
+      accountTitle: lookup.found ? lookup.account_title : null,
+      titleSource: lookup.source || null,
+      kind: 'topup',
+      amount: topup.amount,
+      reference,
+      pinCode: topup.pin_code || null,
+      status: 'success',
+    });
+    // NOTE: provider mobile account se paisa OTP-verify par hi cut ho chuka hai
+    // (gateway.service gatewayVerifyOtp debit) — callback par wapas credit NAHI
+    // hota. Sirf real account-title ensure karta hoon (admin ledger ke liye).
+    await conn.query(
+      `UPDATE provider_wallets SET account_title = COALESCE(account_title, ?) WHERE provider = ? AND account_number = ?`,
+      [lookup.found ? lookup.account_title : null, topup.provider, topup.mobile_number]
     );
     await notifyHelper(topup.user_id, 'wallet', `Wallet top-up successful: Rs ${topup.amount} via ${topup.provider}`);
     return { status: 'success', balance: after[0].balance, amount: topup.amount };
@@ -303,6 +344,10 @@ async function getStatement(userId, opts = {}) {
               JOIN service_professionals sp2 ON sp2.id = pp.professional_id
               WHERE sp2.user_id = ? AND pp.booking_id = t.related_booking_id
               LIMIT 1) AS penalty_id,
+            (SELECT w.id FROM withdrawals w
+              WHERE w.user_id = ? AND t.type = 'withdrawal' AND w.amount = t.amount
+                AND t.note LIKE CONCAT('%', w.account_number, '%')
+              ORDER BY w.id DESC LIMIT 1) AS withdrawal_id,
             CASE
               WHEN t.type IN ('hold','refund','release') THEN COALESCE(sp.full_name, cu.full_name)
               WHEN t.type = 'payout' THEN cu.full_name
@@ -313,6 +358,7 @@ async function getStatement(userId, opts = {}) {
               WHEN t.type = 'payout' THEN 'Customer'
               WHEN t.type = 'topup' THEN 'JazzCash/Easypaisa Top-up'
               WHEN t.type = 'compensation' THEN 'Customer cancellation compensation'
+              WHEN t.type = 'withdrawal' THEN 'JazzCash/Easypaisa Withdrawal'
               WHEN t.type = 'commission' THEN 'Platform'
               WHEN t.type = 'penalty' THEN 'Platform (Penalty)'
               ELSE 'Platform'
@@ -320,7 +366,7 @@ async function getStatement(userId, opts = {}) {
      ${baseSql}
      ORDER BY t.id DESC
      LIMIT ? OFFSET ?`,
-    [userId, userId, ...params, perPage, (page - 1) * perPage]
+    [userId, userId, userId, ...params, perPage, (page - 1) * perPage]
   );
 
   const [sumRows] = await pool.query(
@@ -367,4 +413,5 @@ module.exports = {
   releaseForBooking,
   getWalletForUpdate,
   addLedger,
+  recordProviderAccount,
 };

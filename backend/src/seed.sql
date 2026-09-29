@@ -30,10 +30,10 @@ INSERT INTO users (phone, email, password_hash, role, status, preferred_language
 VALUES ('03000000000', 'admin@hunar.pk', '$2a$10$jgbPiW3bTA3zO6I36xGEV..wtPzHKQvBafboShOYITWlfRwEuFKMq', 'admin', 'active', 'en')
 ON DUPLICATE KEY UPDATE email = VALUES(email);
 
--- Demo customer: phone 03001234567 / OTP login (any OTP accepted in dev mode)
-INSERT INTO users (phone, role, status, preferred_language)
-VALUES ('03001234567', 'customer', 'active', 'en')
-ON DUPLICATE KEY UPDATE phone = VALUES(phone);
+-- Demo customer: ali@example.com / Customer@123 (password login; OTP-only legacy removed)
+INSERT INTO users (phone, email, password_hash, role, status, preferred_language)
+VALUES ('03001234567', 'ali@example.com', '$2a$10$u88JgGe4eV59/n5F.gCWse1DkG2YSwIgyKKRWNyrKDK4MRmT6Qwae', 'customer', 'active', 'en')
+ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash);
 
 INSERT INTO customers (user_id, full_name)
 SELECT id, 'Ali Raza' FROM users WHERE phone = '03001234567'
@@ -66,11 +66,11 @@ FROM customers c JOIN users u ON u.id = c.user_id WHERE u.phone = '03001234567'
 AND NOT EXISTS (SELECT 1 FROM customer_addresses ca WHERE ca.customer_id = c.id);
 
 -- Demo professionals (verified) - login via phone OTP
-INSERT INTO users (phone, role, status, preferred_language) VALUES
-  ('03011111111', 'professional', 'active', 'en'),
-  ('03011111112', 'professional', 'active', 'en'),
-  ('03011111113', 'professional', 'active', 'en')
-ON DUPLICATE KEY UPDATE phone = VALUES(phone);
+INSERT INTO users (phone, email, password_hash, role, status, preferred_language) VALUES
+  ('03011111111', 'sajjad@example.com', '$2a$10$VCZASI9tnqPE/UBB1hvYgedCED6f7iWc29ByjDZmKw.rX80f.ZIAS', 'professional', 'active', 'en'),
+  ('03011111112', 'arshad@example.com', '$2a$10$VCZASI9tnqPE/UBB1hvYgedCED6f7iWc29ByjDZmKw.rX80f.ZIAS', 'professional', 'active', 'en'),
+  ('03011111113', 'aslam@example.com', '$2a$10$VCZASI9tnqPE/UBB1hvYgedCED6f7iWc29ByjDZmKw.rX80f.ZIAS', 'professional', 'active', 'en')
+ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash);
 
 INSERT INTO service_professionals (user_id, full_name, cnic_number, verification_status, experience_years, bio, payout_account, payout_provider)
 SELECT u.id, v.full_name, v.cnic, 'verified', v.exp, v.bio, v.payout, 'jazzcash'
@@ -122,9 +122,9 @@ JOIN (
 ) hours;
 
 -- One pending verification demo (professional awaiting admin review)
-INSERT INTO users (phone, role, status, preferred_language)
-VALUES ('03014444444', 'professional', 'active', 'en')
-ON DUPLICATE KEY UPDATE phone = VALUES(phone);
+INSERT INTO users (phone, email, password_hash, role, status, preferred_language)
+VALUES ('03014444444', 'rauf@example.com', '$2a$10$VCZASI9tnqPE/UBB1hvYgedCED6f7iWc29ByjDZmKw.rX80f.ZIAS', 'professional', 'active', 'en')
+ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash);
 
 INSERT INTO service_professionals (user_id, full_name, cnic_number, verification_status, experience_years, bio, payout_account, payout_provider)
 SELECT u.id, 'Zafar Iqbal', '3520299999999', 'pending', 3, 'Painter - new applicant', '03014444444', 'easypaisa'
@@ -150,3 +150,11 @@ INSERT INTO contracts (contract_code, customer_id, category_id, workers_needed, 
 SELECT 'HCDEMO03', (SELECT id FROM customers WHERE user_id = (SELECT id FROM users WHERE phone='03012222222')), c.id, 1, 3, CURDATE() + INTERVAL 2 DAY, 8000, 15000,
   'Full house repaint - 2 bed lounge + 3 rooms. Johar Town. Paint provided.', 'open'
 FROM categories c WHERE c.name = 'Painter' AND NOT EXISTS (SELECT 1 FROM contracts WHERE contract_code='HCDEMO03');
+
+-- Real mobile accounts (simulated JazzCash/Easypaisa app balances) so OTP top-ups work out of the box
+INSERT INTO provider_wallets (provider, account_number, balance) VALUES
+  ('jazzcash', '03001234567', 10000.00),
+  ('easypaisa', '03001234567', 5000.00),
+  ('jazzcash', '03011111111', 8000.00),
+  ('easypaisa', '03011111111', 4000.00)
+ON DUPLICATE KEY UPDATE account_number = VALUES(account_number);

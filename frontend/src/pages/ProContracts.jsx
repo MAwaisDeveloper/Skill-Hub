@@ -49,14 +49,14 @@ export default function ProContracts() {
     <Layout title="Contract Marketplace" subtitle="Bulk hiring requests matching your categories — submit your quote">
       <div className="card">
         <h2>How contracts pay</h2>
-        <p className="muted">Customer selects your bid → 40% deposit escrow mein lock → baqi milestones par release. Total contract value par 0% service charges (free launch offer) lagti hai.</p>
+        <p className="muted">Customer selects your bid → 40% deposit locks in escrow → remaining milestones release as approved. Total contract value carries 0% service charges (free launch offer).</p>
       </div>
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
         <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} style={{ width: 'auto', margin: 0 }} />
-        Sab categories ke open contracts bhi dikhaao (browse-only: bid sirf matching category par)
+        Also show open contracts from all categories (browse-only: bid only on matching category)
       </label>
       {contracts.length === 0 && <div className="card"><Empty icon="📑">No open contracts right now: check back soon.</Empty></div>}
       {contracts.map((c) => (

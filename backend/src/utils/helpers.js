@@ -41,10 +41,10 @@ async function issueOtp(phone, purpose = 'login') {
   return { sent: true, devCode: config.nodeEnv !== 'production' ? code : undefined };
 }
 
-async function verifyOtp(phone, code) {
+async function verifyOtp(phone, code, purpose = 'login') {
   const [rows] = await pool.query(
-    `SELECT * FROM otp_logins WHERE phone = ? AND purpose = 'login' AND consumed_at IS NULL AND expires_at > NOW() ORDER BY id DESC LIMIT 1`,
-    [phone]
+    `SELECT * FROM otp_logins WHERE phone = ? AND purpose = ? AND consumed_at IS NULL AND expires_at > NOW() ORDER BY id DESC LIMIT 1`,
+    [phone, purpose]
   );
   if (!rows.length) throw new HttpError(400, 'OTP expired or not found. Request a new one.');
   const record = rows[0];

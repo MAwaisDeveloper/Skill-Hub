@@ -96,22 +96,19 @@ router.post('/otp/verify', asyncHandler(async (req, res) => {
   res.json(token);
 }));
 
-// ---- Password login: email primary (phone still accepted) ----
+// ---- Password login: email only (phone numbers are not login identifiers) ----
 router.post('/password/login', asyncHandler(async (req, res) => {
-  const { identifier, phone, email, password } = req.body;
-  let user = null;
-  const idf = String(identifier || phone || email || '').trim();
+  const { identifier, email, password } = req.body;
+  const idf = String(identifier || email || '').trim().toLowerCase();
   if (!idf || !password) throw new HttpError(400, 'Email and password are both required');
-
-  if (/^03\d{9}$/.test(normalizePhone(idf))) {
-    const [rows] = await pool.query(`SELECT * FROM users WHERE phone = ?`, [normalizePhone(idf)]);
-    user = rows[0];
-  } else {
-    const [rows] = await pool.query(`SELECT * FROM users WHERE email = ?`, [idf.toLowerCase()]);
-    user = rows[0];
+  if (!/^[A-Za-z][^\s@]*@[^\s@]+\.[A-Za-z]{2,}$/.test(idf)) {
+    throw new HttpError(400, 'Please enter a valid email address. Login is by email only.');
   }
+
+  const [rows] = await pool.query(`SELECT * FROM users WHERE email = ?`, [idf]);
+  const user = rows[0];
   if (!user || !user.password_hash || !bcrypt.compareSync(String(password), user.password_hash)) {
-    throw new HttpError(401, 'Invalid email/phone or password');
+    throw new HttpError(401, 'Invalid email or password');
   }
   if (user.status !== 'active') throw new HttpError(403, 'Account suspended');
   const token = await finalizeLogin(user);
@@ -163,6 +160,9 @@ async function finalizeLogin(user) {
   } else if (user.role === 'professional') {
     const [p] = await pool.query(`SELECT id, full_name, profile_photo, verification_status, average_rating, completed_jobs FROM service_professionals WHERE user_id = ?`, [user.id]);
     profile = p[0] || null;
+  } else if (user.role === 'admin') {
+    // Admin ka koi customers/service_professionals row nahi hota: header ke liye display profile
+    profile = { full_name: 'Administrator', email: user.email, phone: user.phone };
   }
   const token = signToken(user);
   return { token, user: { id: user.id, phone: user.phone, email: user.email, role: user.role, preferred_language: user.preferred_language }, profile };
@@ -179,16 +179,24 @@ router.put('/me', authenticate, asyncHandler(async (req, res) => {
   res.json({ updated: true });
 }));
 
-// ---- Admin login (password) ----
+// ---- Admin login (email or phone identifier, password) ----
 router.post('/admin/login', asyncHandler(async (req, res) => {
-  const { phone, password } = req.body;
-  const [users] = await pool.query(`SELECT * FROM users WHERE phone = ? AND role = 'admin'`, [normalizePhone(phone)]);
+  const { email, phone, password } = req.body;
+  const idf = String(email || phone || '').trim();
+  if (!idf) throw new HttpError(400, 'Admin email is required');
+  const isEmail = idf.includes('@');
+  const [users] = await pool.query(
+    isEmail
+      ? `SELECT * FROM users WHERE email = ? AND role = 'admin'`
+      : `SELECT * FROM users WHERE phone = ? AND role = 'admin'`,
+    [isEmail ? idf.toLowerCase() : normalizePhone(idf)]
+  );
   const user = users[0];
   if (!user || !user.password_hash || !bcrypt.compareSync(password || '', user.password_hash)) {
     throw new HttpError(401, 'Invalid admin credentials');
   }
-  const token = signToken(user);
-  res.json({ token, user: { id: user.id, phone: user.phone, role: 'admin' } });
+  const token = await finalizeLogin(user);
+  res.json(token);
 }));
 
 // ---- Change / set password ----
@@ -201,7 +209,7 @@ router.post('/change-password', authenticate, asyncHandler(async (req, res) => {
     if (!current_password || !bcrypt.compareSync(current_password, hash)) throw new HttpError(401, 'Current password galat hai');
   }
   await pool.query(`UPDATE users SET password_hash = ? WHERE id = ?`, [bcrypt.hashSync(new_password, 10), req.user.id]);
-  res.json({ updated: true, message: 'Password saved. Ab email/phone + password se bhi login kar sakte hain.' });
+  res.json({ updated: true, message: 'Password saved. You can now sign in with your email and this password.' });
 }));
 
 // ---- Me ----
@@ -214,6 +222,8 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
   } else if (user.role === 'professional') {
     const [p] = await pool.query(`SELECT * FROM service_professionals WHERE user_id = ?`, [user.id]);
     user.profile = p[0] || null;
+  } else if (user.role === 'admin') {
+    user.profile = { full_name: 'Administrator', email: user.email, phone: user.phone };
   }
   res.json({ user });
 }));

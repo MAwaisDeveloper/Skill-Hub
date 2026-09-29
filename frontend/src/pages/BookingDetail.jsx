@@ -130,8 +130,8 @@ export default function BookingDetail() {
           {/* Offer from professional — accept = deal finalize */}
           {s === 'waiting_for_professional' && booking.offer_status === 'pending' && (
             <div className="card" style={{ borderLeft: '4px solid var(--gold)' }}>
-              <h2>💼 Professional ka Offer</h2>
-              <p style={{ fontSize: 18 }}><b>{booking.professional_name}</b> ne kaam ke liye <b>Rs {Number(booking.offered_price).toLocaleString()}</b> bola hai</p>
+              <h2>💼 Professional's Offer</h2>
+              <p style={{ fontSize: 18 }}><b>{booking.professional_name}</b> has offered <b>Rs {Number(booking.offered_price).toLocaleString()}</b> for this job</p>
               {booking.offer_message && <div className="alert info">"{booking.offer_message}"</div>}
               {booking.arrival_minutes && <p className="muted">ETA: {booking.arrival_minutes} min</p>}
               <div className="row">

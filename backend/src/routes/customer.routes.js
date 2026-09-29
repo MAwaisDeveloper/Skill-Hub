@@ -253,9 +253,23 @@ router.post('/wallet/account-title', ...customerOnly, asyncHandler(async (req, r
   res.json(await lookupAccountTitle(provider || 'jazzcash', mobile_number));
 }));
 
+// Gateway OTP "SMS" bhejta hai user ke JazzCash/Easypaisa mobile account par
+// (dev mode: code response + server log; production: real SMS gateway)
+router.post('/wallet/topup/:reference/send-otp', ...customerOnly, asyncHandler(async (req, res) => {
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewaySendOtp({ reference: req.params.reference }));
+}));
+
+// Gateway OTP verification: sahi OTP par mobile account se paisa cut hota hai
+router.post('/wallet/topup/:reference/verify-otp', ...customerOnly, asyncHandler(async (req, res) => {
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewayVerifyOtp({ reference: req.params.reference, otp: req.body.otp }));
+}));
+
 // Simulated gateway hosted page POST -> processes payment (dev only; production uses gateway callback)
 router.post('/wallet/topup/:reference/confirm', ...customerOnly, asyncHandler(async (req, res) => {
-  res.json(await paymentService.gatewayCallback({ reference: req.params.reference, status: req.body.status || 'success' }));
+  const gatewayService = require('../services/gateway.service');
+  res.json(await gatewayService.gatewayCallback({ reference: req.params.reference, status: req.body.status || 'success' }));
 }));
 
 router.get('/wallet/topup/:reference', ...customerOnly, asyncHandler(async (req, res) => {

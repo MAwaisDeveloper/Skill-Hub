@@ -14,7 +14,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
 
   const load = async () => {
-    try { setMe(await api.get('/auth/me', token)); } catch (e) { setError(e.message); }
+    try { setMe((await api.get('/auth/me', token)).user); } catch (e) { setError(e.message); }
   };
   useEffect(() => { load(); }, []);
 
@@ -32,7 +32,7 @@ export default function SettingsPage() {
     try {
       if (pwd.new_password !== pwd.confirm) throw new Error('Confirm password does not match');
       await api.post('/auth/change-password', { current_password: pwd.current_password, new_password: pwd.new_password }, token);
-      setMsg('Password saved ✓ — you can now sign in with phone + password as well as OTP.');
+      setMsg('Password saved ✓ — you can now sign in with email + password as well as OTP.');
       setPwd({ current_password: '', new_password: '', confirm: '' });
     } catch (e) { setError(e.message); }
   };
@@ -47,8 +47,9 @@ export default function SettingsPage() {
         <div className="card">
           <h2>👤 Account</h2>
           <div className="kv mb">
-            <span className="k">Name</span><span><b>{me?.profile?.full_name || session?.user?.phone}</b></span>
-            <span className="k">Phone (login)</span><span>{me?.phone}</span>
+            <span className="k">Name</span><span><b>{me?.profile?.full_name || session?.profile?.full_name || session?.user?.email?.split('@')[0] || 'User'}</b></span>
+            <span className="k">Phone</span><span>{me?.phone}</span>
+            <span className="k">Email (login)</span><span>{me?.email || 'not set'}</span>
             <span className="k">Role</span><span><span className="badge status">{role}</span></span>
             <span className="k">{role === 'professional' ? 'Verification' : 'Trust Score'}</span>
             <span>{role === 'professional' ? (p?.verification_status || 'pending') : `${p?.trust_score ?? 100} / 100`}</span>
@@ -91,7 +92,7 @@ export default function SettingsPage() {
         <div className="card">
           <h2>🔒 Password</h2>
           {me?.password_hash !== undefined && !me?.password_hash && (
-            <div className="alert info">You currently log in with OTP only: setting a password also enables phone + password login.</div>
+            <div className="alert info">You currently log in with OTP only: setting a password also enables email + password login.</div>
           )}
           <label>Current Password (leave empty if you have never set one)</label>
           <input type="password" value={pwd.current_password} onChange={(e) => setPwd({ ...pwd, current_password: e.target.value })} />
