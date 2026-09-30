@@ -1,76 +1,34 @@
 require('dotenv').config();
 
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
-const compression = require('compression');
-const path = require('path');
+// Pure Express app (serverless-safe, koi listen nahi yahan)
+const app = require('./app');
+
+// Local cron only for long-running server (Vercel serverless par nahi chalta)
+let startJobs = null;
+try {
+  startJobs = require('./jobs/autoRelease.job').startJobs;
+} catch (_) { /* jobs optional */ }
 
 const config = require('./config');
-const { errorHandler } = require('./middleware/error');
+const { pool } = require('./config/db');
 
-const authRoutes = require('./routes/auth.routes');
-const customerRoutes = require('./routes/customer.routes');
-const professionalRoutes = require('./routes/professional.routes');
-const adminRoutes = require('./routes/admin.routes');
-const modulesRoutes = require('./routes/modules.routes');
-const invoiceRoutes = require('./routes/invoice.routes');
+const PORT = process.env.PORT || 4000;
 
-const app = express();
-
-app.use(compression());
-
-app.use(
-  cors({
-    origin: config.clientUrl,
-    credentials: true
-  })
-);
-
-app.use(express.json({ limit: '10mb' }));
-
-app.use(morgan('dev'));
-
-app.get('/', (req, res) => {
-  res.json({
-    name: 'Hunar API',
-    status: 'ok',
-    version: '1.0.0'
-  });
+const server = app.listen(PORT, () => {
+  console.log(`[server] Hunar API listening on http://localhost:${PORT}`);
+  if (config.nodeEnv !== 'test' && typeof startJobs === 'function') {
+    try {
+      startJobs();
+    } catch (err) {
+      console.error('[server] failed to start cron jobs:', err.message);
+    }
+  }
 });
 
-app.get('/health', (req, res) => {
-  res.json({
-    ok: true,
-    time: new Date().toISOString()
+// Graceful shutdown (local dev + Ctrl+C)
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    console.log(`[server] ${sig} received, shutting down...`);
+    server.close(() => pool.end().then(() => process.exit(0)));
   });
-});
-
-app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    time: new Date().toISOString()
-  });
-});
-
-app.use('/api/auth', authRoutes);
-app.use('/api/customer', customerRoutes);
-app.use('/api/professional', professionalRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/modules', modulesRoutes);
-app.use('/api/invoices', invoiceRoutes);
-
-app.use(
-  '/uploads',
-  express.static(path.join(__dirname, '..', 'uploads'))
-);
-
-app.use((req, res) => {
-  res.status(404).json({
-    error: `Route not found: ${req.method} ${req.path}`
-  });
-});
-
-app.use(errorHandler);
-
-module.exports = app;
+}

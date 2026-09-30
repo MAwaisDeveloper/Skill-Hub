@@ -181,14 +181,19 @@ router.put('/me', authenticate, asyncHandler(async (req, res) => {
 
 // ---- Admin login (password) ----
 router.post('/admin/login', asyncHandler(async (req, res) => {
-  const { phone, password } = req.body;
-  const [users] = await pool.query(`SELECT * FROM users WHERE phone = ? AND role = 'admin'`, [normalizePhone(phone)]);
+  // Email ya phone dono accept (frontend identifier 'phone' field mein bhejta hai, email bhi ho sakta hai)
+  const idf = String(req.body.phone || req.body.email || '').trim();
+  const password = req.body.password;
+  const byEmail = idf.includes('@');
+  const column = byEmail ? 'email' : 'phone';
+  const value = byEmail ? idf.toLowerCase() : normalizePhone(idf);
+  const [users] = await pool.query(`SELECT * FROM users WHERE ${column} = ? AND role = 'admin'`, [value]);
   const user = users[0];
   if (!user || !user.password_hash || !bcrypt.compareSync(password || '', user.password_hash)) {
     throw new HttpError(401, 'Invalid admin credentials');
   }
   const token = signToken(user);
-  res.json({ token, user: { id: user.id, phone: user.phone, role: 'admin' } });
+  res.json({ token, user: { id: user.id, phone: user.phone, email: user.email, role: 'admin' } });
 }));
 
 // ---- Change / set password ----

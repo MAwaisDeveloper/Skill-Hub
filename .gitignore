@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# dist/  (frontend/dist is tracked so Vercel serves the built SPA from repo)
 .env
 *.log
 /tmp
