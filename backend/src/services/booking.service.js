@@ -261,11 +261,11 @@ async function proStatus(proUserId, bookingId, nextStatus) {
       await notify(ctx.customerUserId, 'booking', `🚗 Professional nikal chuka hai aap ki taraf — booking ${ctx.booking.booking_code}. Map par live rasta dekhen.`, bookingId);
     }
     if (nextStatus === 'work_completed') {
-      // start auto-release countdown (Section 8.4)
+      // start auto-release countdown (Section 8.4) — default = 1 hour (platform_settings)
       const settings = await getSettings();
       const autoAt = new Date(Date.now() + settings.autoReleaseHours * 3600 * 1000);
       await conn.query(`UPDATE bookings SET auto_release_at = ? WHERE id = ?`, [autoAt, bookingId]);
-      await notify(ctx.customerUserId, 'booking', `Work marked complete on ${ctx.booking.booking_code}. Confirm within ${settings.autoReleaseHours}h or payment auto-releases.`, bookingId);
+      await notify(ctx.customerUserId, 'booking', `Work marked complete on ${ctx.booking.booking_code}. Confirm within ${settings.autoReleaseHours} hour(s) or payment auto-releases automatically.`, bookingId);
     }
     return { status: nextStatus };
   });
