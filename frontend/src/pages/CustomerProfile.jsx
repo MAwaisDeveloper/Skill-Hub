@@ -152,7 +152,7 @@ export default function CustomerProfile() {
             lng={form.longitude ? Number(form.longitude) : null}
             onChange={(la, ln) => setForm((f) => ({ ...f, latitude: String(la), longitude: String(ln) }))}
  />
-          {!form.latitude && <p className="muted">⚠ Confirming the location is required — press "Confirm Location" or drop a pin on the map.</p>}
+          {!form.latitude && <p className="muted">⚠ Confirming the location is required: press "Confirm Location" or drop a pin on the map.</p>}
           <button className="btn" disabled={!form.area?.trim() || !form.full_address?.trim() || !form.latitude} onClick={addAddress}>Add Address</button>
         </div>
       </div>

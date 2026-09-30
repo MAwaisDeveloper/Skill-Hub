@@ -26,7 +26,7 @@ export default function ProPayouts() {
 
       <div className="card">
         <h2>💰 Job Payouts (90% of each deal)</h2>
-        {payouts.length === 0 && <Empty icon="💰">Abhi koi payout nahi. Jobs complete karein — release par payout yahan aayega.</Empty>}
+        {payouts.length === 0 && <Empty icon="💰">Abhi koi payout nahi. Jobs complete karein: release par payout yahan aayega.</Empty>}
         {payouts.length > 0 && (
           <table>
             <thead><tr><th>Date</th><th>Booking</th><th>Amount</th><th>Status</th><th></th></tr></thead>

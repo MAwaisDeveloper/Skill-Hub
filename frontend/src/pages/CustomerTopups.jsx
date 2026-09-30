@@ -18,10 +18,10 @@ export default function CustomerTopups() {
   }, []);
 
   return (
-    <Layout title="Top-ups — JazzCash / Easypaisa" subtitle="Wallet mein add kiye gaye paise ka poora record, invoice ke sath">
+    <Layout title="Top-ups — JazzCash / Easypaisa" subtitle="Complete record of every amount added to your wallet, with invoices">
       {error && <div className="alert error">{error}</div>}
       <div className="card">
-        {topups.length === 0 && <Empty icon="⬆️">Abhi koi top-up nahi hua. <Link to="/customer/wallet">Add Money</Link> se shuru karein.</Empty>}
+        {topups.length === 0 && <Empty icon="⬆️">No top-ups yet. Start from <Link to="/customer/wallet">Add Money</Link>.</Empty>}
         {topups.length > 0 && (
           <table>
             <thead><tr><th>Date &amp; Time</th><th>Provider</th><th>Number</th><th>Reference</th><th>Amount</th><th>Status</th><th></th></tr></thead>

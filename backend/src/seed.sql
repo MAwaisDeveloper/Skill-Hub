@@ -49,6 +49,16 @@ SELECT w.id, 'topup', 20000.00, 'Demo seed top-up', 20000.00
 FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.phone = '03001234567'
 AND NOT EXISTS (SELECT 1 FROM wallet_transactions t WHERE t.wallet_id = w.id AND t.type = 'topup');
 
+-- Wallet for demo contract customer (Sadia Khan) — seed balance ko ledger-tracked banata hai
+INSERT INTO wallets (user_id, balance)
+SELECT id, 100000.00 FROM users WHERE phone = '03012222222'
+ON DUPLICATE KEY UPDATE balance = balance;
+
+INSERT INTO wallet_transactions (wallet_id, type, amount, note, balance_after)
+SELECT w.id, 'topup', 100000.00, 'Demo seed top-up (contracts)', 100000.00
+FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.phone = '03012222222'
+AND NOT EXISTS (SELECT 1 FROM wallet_transactions t WHERE t.wallet_id = w.id AND t.type = 'topup' AND t.note LIKE 'Demo seed%');
+
 -- Demo address
 INSERT INTO customer_addresses (customer_id, label, city, area, full_address, latitude, longitude, is_default)
 SELECT c.id, 'home', 'Lahore', 'Gulberg III', 'House 12, Street 5, Gulberg III, Lahore', 31.5155, 74.3436, 1

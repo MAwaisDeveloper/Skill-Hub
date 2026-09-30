@@ -332,7 +332,7 @@ async function getCancelPreview(actorUserId, actorRole, bookingId) {
   const isPro = actorRole === 'professional' && actorUserId === proUserId;
   if (!isCustomer && !isPro) throw new HttpError(403, 'Not a party to this booking');
 
-  const cancellable = ['waiting_for_professional', 'accepted'].includes(booking.status);
+  const cancellable = ['pending_payment', 'waiting_for_professional', 'accepted'].includes(booking.status);
   const proAccepted = booking.status === 'accepted';
   const held = Number(booking.final_price);
 
@@ -349,6 +349,10 @@ async function getCancelPreview(actorUserId, actorRole, bookingId) {
   }
 
   if (isCustomer) {
+    // pending_payment = paisa abhi hold hi nahi hua — cancel par kuch nahi katta
+    if (booking.status === 'pending_payment') {
+      return { ...base, you_are: 'customer', refund_percent: 100, you_will_get_back: 0, will_be_cut: 0, cut_breakdown: null, trust_score_impact: -1, message: 'Payment abhi hua hi nahi — booking foran cancel ho jayegi, kuch nahi kata jayega.' };
+    }
     const refundPercent = proAccepted ? settings.customerCancelRefundPercent : 100;
     const refundAmount = Math.round(held * (refundPercent / 100) * 100) / 100;
     const cut = Math.round((held - refundAmount) * 100) / 100;
@@ -410,12 +414,20 @@ async function cancelBooking(actorUserId, actorRole, bookingId) {
     const proUserId = proRows[0].user_id;
 
     if (![customerUserId, proUserId].includes(actorUserId)) throw new HttpError(403, 'Not a party to this booking');
-    if (!['waiting_for_professional', 'accepted'].includes(booking.status)) {
+    if (!['pending_payment', 'waiting_for_professional', 'accepted'].includes(booking.status)) {
       throw new HttpError(400, `Cannot cancel a booking in ${booking.status}`);
     }
 
     const proAccepted = booking.status === 'accepted';
     const held = Number(booking.final_price);
+    // pending_payment: paisa hold hi nahi hua — sirf status cancel, na refund na cut
+    if (booking.status === 'pending_payment') {
+      await conn.query(`UPDATE bookings SET status = 'cancelled' WHERE id = ?`, [bookingId]);
+      await logBookingEvent(conn, bookingId, 'cancelled', actorUserId, 'Customer cancelled before payment (nothing was charged)');
+      await adjustTrustScore(customerUserId, -1);
+      if (proUserId) await notify(proUserId, 'booking', `Booking ${booking.booking_code} cancelled by customer (before payment)`, bookingId);
+      return { status: 'cancelled', refund_amount: 0 };
+    }
 
     // free the slot
     await conn.query(
@@ -428,6 +440,13 @@ async function cancelBooking(actorUserId, actorRole, bookingId) {
       if (proAccepted) refundPercent = settings.customerCancelRefundPercent; // 85% default
       const refundAmount = Math.round(held * (refundPercent / 100) * 100) / 100;
       await walletService.refundHold(conn, customerUserId, bookingId, refundAmount, `Customer cancellation (${refundPercent}% refund)`);
+      // FIX: cut wala hissa (15%) bhi escrow held se nikaalo — refundHold sirf refund
+      // amount minus karta hai, warna cut paisa held_amount mein hamesha stuck reh jata tha
+      const cutTotal = held - refundAmount;
+      if (cutTotal > 0) {
+        const [custWalletRow] = await conn.query(`SELECT id FROM wallets WHERE user_id = ?`, [customerUserId]);
+        await conn.query(`UPDATE wallets SET held_amount = GREATEST(0, held_amount - ?) WHERE id = ?`, [cutTotal, custWalletRow[0].id]);
+      }
       if (refundPercent < 100) {
         const cut = held - refundAmount; // 15% cut (admin-configurable refund%) split: pro compensation + platform (Section 10.1)
         const proShare = Math.round(held * (settings.customerCancelProCompensationPercent / 100) * 100) / 100;
@@ -437,7 +456,9 @@ async function cancelBooking(actorUserId, actorRole, bookingId) {
         if (proWallet.length) {
           await conn.query(`UPDATE wallets SET balance = balance + ? WHERE id = ?`, [proShare, proWallet[0].id]);
           const [pwAfter] = await conn.query(`SELECT balance FROM wallets WHERE id = ?`, [proWallet[0].id]);
-          await walletService.addLedger(conn, proWallet[0].id, 'commission', proShare, bookingId, 'Compensation share of customer cancellation cut', pwAfter[0].balance);
+          // 'compensation' (IN) — pehle 'commission' (OUT) se likha jata tha jo pro ki
+          // statement mein received paisa "Outgoing" dikhata tha (audit fix)
+          await walletService.addLedger(conn, proWallet[0].id, 'compensation', proShare, bookingId, 'Compensation share of customer cancellation cut', pwAfter[0].balance);
         }
         // platform share recorded as commission revenue
         await conn.query(

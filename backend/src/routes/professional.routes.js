@@ -166,7 +166,8 @@ router.get('/bookings', ...proOnly, asyncHandler(async (req, res) => {
 router.get('/bookings/:id', ...proOnly, asyncHandler(async (req, res) => {
   const proId = await getProId(req.user.id);
   const [rows] = await pool.query(
-    `SELECT b.*, c.name AS category_name, cu.full_name AS customer_name, ca.full_address AS customer_address,
+    `SELECT b.*, c.name AS category_name, cu.full_name AS customer_name, cu2.phone AS customer_phone,
+            cu.profile_photo AS customer_photo, ca.full_address AS customer_address,
             cu.trust_score AS customer_trust_score,
             (SELECT COUNT(*) FROM bookings b2 WHERE b2.customer_id = b.customer_id AND b2.status = 'completed') AS customer_completed_jobs,
             COALESCE(b.dest_lat, ca.latitude) AS dest_lat, COALESCE(b.dest_lng, ca.longitude) AS dest_lng,
@@ -174,6 +175,7 @@ router.get('/bookings/:id', ...proOnly, asyncHandler(async (req, res) => {
      FROM bookings b
      JOIN categories c ON c.id = b.category_id
      JOIN customers cu ON cu.id = b.customer_id
+     JOIN users cu2 ON cu2.id = cu.user_id
      LEFT JOIN customer_addresses ca ON ca.id = b.address_id
      WHERE b.id = ? AND b.professional_id = ?`,
     [Number(req.params.id), proId]
@@ -265,11 +267,13 @@ router.post('/wallet/payout-title', ...proOnly, asyncHandler(async (req, res) =>
 
 // Payout request: wallet -> JazzCash/Easypaisa account (admin approves)
 router.post('/wallet/withdraw', ...proOnly, asyncHandler(async (req, res) => {
-  const { requestWithdrawal } = require('../services/withdrawal.service');
-  const result = await requestWithdrawal(req.user.id, 'professional', req.body);
+  const wdService = require('../services/withdrawal.service');
+  const result = await wdService.requestWithdrawal(req.user.id, 'professional', req.body);
   // also remember as default payout account
   await pool.query(`UPDATE service_professionals SET payout_account = ?, payout_provider = ? WHERE id = ?`, [req.body.account_number, req.body.provider, await getProId(req.user.id)]);
-  res.json(result);
+  await wdService.autoDisburse(result.withdrawal_id); // gateway auto-payout — no manual approval
+  const [fresh] = await pool.query(`SELECT status FROM withdrawals WHERE id = ?`, [result.withdrawal_id]);
+  res.json({ ...result, status: fresh[0]?.status || result.status });
 }));
 
 router.get('/wallet/withdrawals', ...proOnly, asyncHandler(async (req, res) => {

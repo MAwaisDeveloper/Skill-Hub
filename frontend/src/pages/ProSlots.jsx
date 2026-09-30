@@ -59,7 +59,7 @@ export default function ProSlots() {
 
       <div className="card">
         <h2>My Calendar</h2>
-        {slots.length === 0 && <Empty icon="🗓">No slots yet — add your first slot above.</Empty>}
+        {slots.length === 0 && <Empty icon="🗓">No slots yet: add your first slot above.</Empty>}
         {Object.entries(grouped).map(([date, daySlots]) => (
           <div key={date} className="mb">
             <b>{date}</b>

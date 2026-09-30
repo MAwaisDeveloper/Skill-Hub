@@ -32,7 +32,7 @@ export default function SettingsPage() {
     try {
       if (pwd.new_password !== pwd.confirm) throw new Error('Confirm password does not match');
       await api.post('/auth/change-password', { current_password: pwd.current_password, new_password: pwd.new_password }, token);
-      setMsg('Password saved ✓ — ab phone + password se bhi login ho sakta hai');
+      setMsg('Password saved ✓ — you can now sign in with phone + password as well as OTP.');
       setPwd({ current_password: '', new_password: '', confirm: '' });
     } catch (e) { setError(e.message); }
   };
@@ -79,17 +79,21 @@ export default function SettingsPage() {
 
         {role === 'customer' && (
           <div className="card">
-            <h2>📍 Saved Addresses</h2>
-            <p className="muted">Manage from the Profile & Addresses page (with map pins).</p>
+            <h2>📍 Service Addresses</h2>
+            <p className="muted">
+              Saved addresses appear as options when you book a service: the pin is where your provider will navigate.
+              Manage them (add, pin on map, set default) from the <b>Profile & Addresses</b> page.
+            </p>
+            <a className="btn secondary small" href="/customer/profile" style={{ marginTop: 8 }}>Open Profile & Addresses →</a>
           </div>
         )}
 
         <div className="card">
           <h2>🔒 Password</h2>
           {me?.password_hash !== undefined && !me?.password_hash && (
-            <div className="alert info">You currently log in with OTP only — setting a password also enables phone + password login.</div>
+            <div className="alert info">You currently log in with OTP only: setting a password also enables phone + password login.</div>
           )}
-          <label>Current Password (agar set hai)</label>
+          <label>Current Password (leave empty if you have never set one)</label>
           <input type="password" value={pwd.current_password} onChange={(e) => setPwd({ ...pwd, current_password: e.target.value })} />
           <label>New Password (min 8)</label>
           <input type="password" value={pwd.new_password} onChange={(e) => setPwd({ ...pwd, new_password: e.target.value })} />

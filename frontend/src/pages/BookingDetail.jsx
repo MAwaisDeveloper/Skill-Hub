@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api, fmt } from '../api';
 import { useApp } from '../context';
 import Layout from '../components/Layout';
-import { StatusBadge, CancelPreviewModal } from '../components/ui';
+import { StatusBadge, CancelPreviewModal, DisputeModal } from '../components/ui';
 import LiveMap from '../components/LiveMap';
 
 export default function BookingDetail() {
@@ -17,11 +17,15 @@ export default function BookingDetail() {
   const [review, setReview] = useState({ rating: 5, comment: '' });
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [reviewMsg, setReviewMsg] = useState('');
   const [cancelPreview, setCancelPreview] = useState(null);
+  const [disputeModal, setDisputeModal] = useState(false);
+  const [disputeBusy, setDisputeBusy] = useState(false);
 
-  // Chat auto-refresh (5s) jab tak booking active hai — real messaging app feel
+  // Chat auto-refresh (5s) jab tak booking active hai — booking load na ho (session
+  // mismatch/403) to poll NAHI chalate, warna page 'Loading…' par atakta lagta hai
   useEffect(() => {
-    if (!['completed', 'cancelled', 'refunded', 'disputed'].includes(booking?.status)) {
+    if (booking && !['completed', 'cancelled', 'refunded', 'disputed'].includes(booking.status)) {
       const t = setInterval(() => {
         api.get(`/customer/bookings/${id}/messages`, token).then(setMessages).catch(() => {});
       }, 5000);
@@ -41,6 +45,32 @@ export default function BookingDetail() {
     await act(() => api.post(`/customer/bookings/${id}/cancel`, {}, token));
   };
 
+  const doDispute = async ({ reason, description }) => {
+    setDisputeBusy(true);
+    setError(''); setMsg('');
+    try {
+      await api.post(`/customer/bookings/${id}/dispute`, { description: `[${reason}] ${description}` }, token);
+      setDisputeModal(false);
+      setMsg('🚩 Report submitted — your payment stays safely in escrow while an administrator reviews the case.');
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDisputeBusy(false);
+    }
+  };
+
+  const doReview = async () => {
+    setError(''); setMsg(''); setReviewMsg('');
+    try {
+      await api.post(`/customer/bookings/${id}/review`, review, token);
+      setReviewMsg(`★ Thank you! Your ${review.rating}-star review has been saved — the provider has been notified.`);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const load = async () => {
     try {
       setBooking(await api.get(`/customer/bookings/${id}`, token));
@@ -56,7 +86,7 @@ export default function BookingDetail() {
     try {
       const res = await fn();
       if (res?.commission !== undefined) {
-        setMsg(`Payment released! Commission Rs ${res.commission} · Professional received Rs ${res.payout}`);
+        setMsg(`Payment released! Service Charges Rs ${res.commission} · Professional received Rs ${res.payout}`);
       } else if (res) {
         setMsg(res.status ? `Status: ${res.status.replaceAll('_', ' ')}` : 'Done');
       }
@@ -66,7 +96,7 @@ export default function BookingDetail() {
     }
   };
 
-  if (!booking) return <p className="muted">Loading…</p>;
+  if (!booking) return <p className="muted">{error || 'Loading…'}</p>;
   const s = booking.status;
 
   return (
@@ -86,7 +116,7 @@ export default function BookingDetail() {
           <p style={{ fontSize: 13.5 }}><b>{booking.professional_name}</b> · Trust Score <b style={{ color: 'var(--green-dark)' }}>{Number(booking.professional_trust_score ?? 100)}</b>/100
             {' · '}★ {booking.average_rating} · {booking.professional_completed_jobs ?? 0} jobs
             {booking.professional_areas && <span className="muted"> · areas: {booking.professional_areas}</span>}</p>
-          <p className="muted" style={{ fontSize: 13 }}>Aap ka trust score: <b>{Number(booking.my_trust_score ?? 100)}</b>/100 — dono parties verified hain; number share karne ki zaroorat nahi, chat yahin hoti hai.</p>
+          <p className="muted" style={{ fontSize: 13 }}>Your trust score: <b>{Number(booking.my_trust_score ?? 100)}</b>/100 — both parties are verified; there is no need to share phone numbers, chat right here.</p>
 
           <h2 className="mt">Timeline</h2>
           <ul className="timeline">
@@ -120,7 +150,7 @@ export default function BookingDetail() {
               <h2>⏰ Professional Late Hai</h2>
               <p>The professional has informed you they will arrive late. Approve or cancel:</p>
               <ul style={{ paddingLeft: 18 }}>
-                <li><b>Approve:</b> the job continues as planned — <b>nobody's money is deducted</b> (only the normal 10% commission applies at release)</li>
+                <li><b>Approve:</b> the job continues as planned — <b>nobody's money is deducted</b> (only the normal free platform offer applies at release)</li>
                 <li><b>Cancel:</b> you receive a <b>100% refund</b>, and a 10% penalty is recorded against the professional</li>
               </ul>
               <div className="row">
@@ -130,10 +160,53 @@ export default function BookingDetail() {
             </div>
           )}
 
+          {/* Cancelled bookings: paison ka hisaab — kya kata, kya wapas aaya */}
+          {s === 'cancelled' && booking.cancel_summary && (
+            <div className="card" style={{ borderLeft: '4px solid var(--danger)' }}>
+              <h2>💸 Cancellation Summary</h2>
+              {booking.cancel_summary.cancelled_by === 'professional' && (
+                <div className="alert info">The provider cancelled this booking: your full payment has been refunded to your wallet.</div>
+               )}
+              <p className="muted mb" style={{ fontSize: 13 }}>
+                {booking.cancel_summary.note || 'Escrow has been settled.'}
+              </p>
+              <table>
+                <tbody>
+                  {booking.cancel_summary.held_amount > 0 ? (
+                    <>
+                      <tr><td>Escrow mein held (pay kiya tha)</td><td>{fmt(booking.cancel_summary.held_amount)}</td></tr>
+                      <tr>
+                        <td>{booking.cancel_summary.refund_percent === 100 ? 'Wapas aaya (100% refund)' : `Wapas aaya (${booking.cancel_summary.refund_percent}% refund)`}</td>
+                        <td className="td-amt-in">+ {fmt(booking.cancel_summary.refund_amount)} <span className="muted">wallet mein</span></td>
+                      </tr>
+                      {booking.cancel_summary.cut_total > 0 && (
+                        <tr><td>Kata gaya (cancellation cut, {100 - booking.cancel_summary.refund_percent}%)</td><td className="td-amt-out">− {fmt(booking.cancel_summary.cut_total)}</td></tr>
+                      )}
+                      {booking.cancel_summary.cut_breakdown && (
+                        <tr><td style={{ paddingLeft: 18 }}>→ Professional compensation</td><td>{fmt(booking.cancel_summary.cut_breakdown.professional_compensation)}</td></tr>
+                      )}
+                      {booking.cancel_summary.cut_breakdown && (
+                        <tr><td style={{ paddingLeft: 18 }}>→ Platform share</td><td>{fmt(booking.cancel_summary.cut_breakdown.platform_share)}</td></tr>
+                      )}
+                    </>
+                  ) : (
+                    <tr><td>No payment was made</td><td>Rs 0 (nothing was charged)</td></tr>
+                  )}
+                </tbody>
+              </table>
+              {booking.cancel_summary.held_amount > 0 && booking.cancel_summary.refund_amount > 0 && (
+                <Link to="/customer/wallet/statement" className="muted" style={{ fontSize: 13 }}>→ View the refund entry in your transaction history</Link>
+              )}
+            </div>
+          )}
+
           <div className="card">
             <h2>Actions</h2>
             {s === 'pending_payment' && (
-              <button className="btn" onClick={() => act(() => api.post(`/customer/bookings/${id}/pay`, {}, token))}>Pay Now (Escrow Hold {fmt(booking.final_price)})</button>
+              <>
+                <button className="btn" onClick={() => act(() => api.post(`/customer/bookings/${id}/pay`, {}, token))}>Pay Now (Escrow Hold {fmt(booking.final_price)})</button>
+                <button className="btn danger" onClick={showCancelPreview}>Cancel Booking (nothing will be charged)</button>
+              </>
             )}
             {s === 'arrived' && (
               <>
@@ -150,10 +223,7 @@ export default function BookingDetail() {
                   <button className="btn" onClick={() => act(() => api.post(`/customer/bookings/${id}/confirm-complete`, {}, token))}>
                     Yes, Confirm & Release {fmt(booking.final_price)}
                   </button>
-                  <button className="btn danger" onClick={() => {
-                    const reason = prompt('Describe the problem:');
-                    if (reason) act(() => api.post(`/customer/bookings/${id}/dispute`, { description: reason }, token));
-                  }}>Report a Problem</button>
+                  <button className="btn danger" onClick={() => setDisputeModal(true)}>Report a Problem</button>
                   <Link to={`/invoice/booking/${id}`} className="btn secondary">🧾 Invoice</Link>
                 </div>
                 <p className="muted mt">Note: if you don't respond within 24 hours, payment is auto-released to the professional.</p>
@@ -161,12 +231,23 @@ export default function BookingDetail() {
             )}
             {['completed'].includes(s) && (
               <>
+                {reviewMsg && <div className="alert success" role="status">{reviewMsg}</div>}
                 <label>Rate this service</label>
-                <select value={review.rating} onChange={(e) => setReview({ ...review, rating: Number(e.target.value) })}>
-                  {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>{'★'.repeat(r)}</option>)}
-                </select>
-                <input placeholder="Comment (optional)" value={review.comment} onChange={(e) => setReview({ ...review, comment: e.target.value })} />
-                <button className="btn" onClick={() => act(() => api.post(`/customer/bookings/${id}/review`, review, token))}>Submit Review</button>
+                <div className="star-row" role="radiogroup" aria-label="Rating">
+                  {[1, 2, 3, 4, 5].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      className={`star-btn ${r <= review.rating ? 'active' : ''}`}
+                      onClick={() => setReview({ ...review, rating: r })}
+                      aria-label={`${r} star`}
+                    >★</button>
+                  ))}
+                  <b className="star-num">{review.rating}/5</b>
+                </div>
+                <label>Comment</label>
+                <textarea rows={3} placeholder="Share your experience — quality of work, punctuality, communication…" value={review.comment} onChange={(e) => setReview({ ...review, comment: e.target.value })} />
+                <button className="btn" onClick={doReview}>Submit Review</button>
               </>
             )}
             {['waiting_for_professional', 'accepted'].includes(s) && (
@@ -176,7 +257,7 @@ export default function BookingDetail() {
                   <b>Cancellation policy (Section 10.1):</b>
                   <ul style={{ paddingLeft: 18, marginTop: 6 }}>
                     <li>Professional has not accepted → <b>100% refund</b> to your wallet instantly</li>
-                    <li>Professional has accepted → <b>85% refund</b> (15% cut: 10% professional compensation + 5% platform — admin-configurable)</li>
+                    <li>Professional has accepted → <b>85% refund</b> (15% cut: 10% professional compensation + 5% platform: admin-configurable)</li>
                     <li>Professional cancel kare → <b>100% refund</b> + professional par 10% penalty (agli payout se auto-cut)</li>
                   </ul>
                 </div>
@@ -188,7 +269,7 @@ export default function BookingDetail() {
             <h2>Chat (numbers hidden)</h2>
             <p className="muted mb">Your messages go only to the professional, <b>{booking.professional_name}</b>.</p>
             <div className="chat-box">
-              {messages.length === 0 && <p className="muted">No messages yet. Keep conversation on-platform — sharing phone numbers/WhatsApp is flagged.</p>}
+              {messages.length === 0 && <p className="muted">No messages yet. Keep conversation on-platform: sharing phone numbers/WhatsApp is flagged.</p>}
               {messages.map((m) => (
                 <div key={m.id} className={`chat-msg ${m.sender_id === session.user.id ? 'mine' : 'theirs'} ${m.flagged ? 'flagged' : ''}`}>
                   <div style={{ fontSize: 11, opacity: 0.8 }}>{m.sender_name || m.sender_phone} ({m.sender_role || ''}) · {String(m.created_at).slice(11, 16)}</div>
@@ -197,7 +278,7 @@ export default function BookingDetail() {
                 </div>
               ))}
             </div>
-            <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Message likhein…" onKeyDown={(e) => { if (e.key === 'Enter' && chatText.trim()) { act(() => api.post(`/customer/bookings/${id}/messages`, { text: chatText }, token)); setChatText(''); } }} />
+            <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Type your message…" onKeyDown={(e) => { if (e.key === 'Enter' && chatText.trim()) { act(() => api.post(`/customer/bookings/${id}/messages`, { text: chatText }, token)); setChatText(''); } }} />
             <button className="btn small mt" onClick={() => { if (chatText.trim()) { act(() => api.post(`/customer/bookings/${id}/messages`, { text: chatText }, token)); setChatText(''); } }}>Send</button>
           </div>
         </div>
@@ -208,7 +289,8 @@ export default function BookingDetail() {
         <LiveMap booking={booking} role="customer" token={token} onUpdate={load} />
       )}
 
-      <CancelPreviewModal preview={cancelPreview} onConfirm={doCancel} onClose={() => setCancelPreview(null)} confirmLabel="Haan, Cancel Karein (refund wallet mein)" />
+      <CancelPreviewModal preview={cancelPreview} onConfirm={doCancel} onClose={() => setCancelPreview(null)} confirmLabel="Yes, Cancel & Refund to Wallet" />
+      <DisputeModal bookingCode={disputeModal ? booking?.booking_code : null} onSubmit={doDispute} onClose={() => setDisputeModal(false)} busy={disputeBusy} />
     </Layout>
   );
 }

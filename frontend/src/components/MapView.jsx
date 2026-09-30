@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 // Display-only Leaflet map — sirf 2 cheezein (user ne bola: mujhe involve na karo):
-//   ➤ GREEN TRIANGLE (rotated) = professional — direction route ke hisaab se update hoti hai
+//   ➤ GREEN TRIANGLE (rotated) = professional — direction real travel direction (movement-bearing)
 //   🔴 RED PIN = destination (kaam ki jagah — fixed)
 // Route line = sab se chhota road rasta (OSRM), dono ko aapas mein attach karta hai
 // props:
 //   points: [{ lat, lng, type: 'pro' | 'dest', label }]
 //   line: { color, coords? } | null   — road polyline
-//   arrowDeg: number — ➤ marker ka rotation (raste ki direction, LiveMap calculate karti hai)
+//   arrowDeg: number — ➤ marker ka rotation (asli travel direction, LiveMap calculate karti hai)
+//   pill: { lat, lng, text } | null  — neutral white distance pill MAP PAR (arrived par null)
+//   overlay: string | null           — map ke andar center-top message (arrival par "Your Destination is Here")
 const MARKER_HTML = {
   pro: (lbl, deg = 0) => `
     <div class="live-marker">
@@ -25,6 +27,9 @@ const MARKER_HTML = {
       <div class="marker-tag dest-tag">${lbl || 'Kaam ki jagah'}</div>
     </div>`,
 };
+
+const PILL_HTML = (text) => `
+  <div class="map-dist-pill"><span class="dot"></span>${text}</div>`;
 
 export function useLeaflet(setReady) {
   useEffect(() => {
@@ -48,11 +53,12 @@ export function useLeaflet(setReady) {
   }, []);
 }
 
-export default function MapView({ points = [], height = 260, zoom = 13, line = null, rotateArrow = null, arrowDeg = 0 }) {
+export default function MapView({ points = [], height = 260, zoom = 13, line = null, rotateArrow = null, arrowDeg = 0, pill = null, overlay = null }) {
   const divRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
-  const markerRefs = useRef({}); // type -> marker (smooth move)
+  const pillRef = useRef(null); // distance pill — bina poore layer reset ke update hota hai
+  const overlayRef = useRef(null); // HTML overlay (map ke andar message)
   const [ready, setReady] = useState(false);
   useLeaflet(setReady);
 
@@ -66,14 +72,13 @@ export default function MapView({ points = [], height = 260, zoom = 13, line = n
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
     setTimeout(() => map.invalidateSize(), 200);
-    return () => { map.remove(); mapRef.current = null; markerRefs.current = {}; };
+    return () => { map.remove(); mapRef.current = null; pillRef.current = null; };
   }, [ready]);
 
   useEffect(() => {
     if (!ready || !mapRef.current || !layerRef.current) return;
     const L = window.L;
     layerRef.current.clearLayers();
-    markerRefs.current = {};
     const valid = points.filter((p) => Number(p.lat) && Number(p.lng));
     if (!valid.length) return;
     // eslint-disable-next-line no-unused-vars
@@ -90,9 +95,6 @@ export default function MapView({ points = [], height = 260, zoom = 13, line = n
       }).addTo(layerRef.current);
     }
 
-    // (midpoint chevron hata diya — user ko duplicate lagta tha; ➤ marker khud hi
-    //  raste ki direction mein ghoomta hai)
-
     valid.forEach((p) => {
       const type = p.type || 'dest';
       const html = (MARKER_HTML[type] || MARKER_HTML.dest)(p.label, arrowDeg);
@@ -102,12 +104,36 @@ export default function MapView({ points = [], height = 260, zoom = 13, line = n
         zIndexOffset: type === 'dest' ? 500 : 600,
       }).addTo(layerRef.current);
       if (p.label) marker.bindPopup(`<b>${p.label}</b>`);
-      markerRefs.current[type] = marker;
       bounds.push([Number(p.lat), Number(p.lng)]);
     });
 
+    // Distance pill — ➤ ke UPAR float karta hai (neutral white, real apps jaisa)
+    if (pillRef.current) { pillRef.current.remove(); pillRef.current = null; }
+    if (pill && Number(pill.lat) && Number(pill.lng)) {
+      pillRef.current = L.marker([Number(pill.lat), Number(pill.lng)], {
+        icon: L.divIcon({ className: 'live-pill-icon', html: PILL_HTML(pill.text), iconSize: [0, 0], iconAnchor: [0, 34] }),
+        interactive: false,
+        zIndexOffset: 900,
+      }).addTo(layerRef.current);
+    }
+
     mapRef.current.fitBounds(bounds, { padding: [45, 45], maxZoom: zoom + 3 });
-  }, [points, ready, line, arrowDeg]);
+  }, [points, ready, line, arrowDeg, pill]);
+
+  // Arrival overlay — map ke andar center-top message (HTML overlay, Leaflet pane ke upar)
+  useEffect(() => {
+    const wrap = divRef.current?.parentElement; // .map-wrap
+    if (!wrap) return;
+    if (overlayRef.current) { overlayRef.current.remove(); overlayRef.current = null; }
+    if (overlay) {
+      const el = document.createElement('div');
+      el.className = 'map-arrived-overlay';
+      el.textContent = overlay;
+      wrap.appendChild(el);
+      overlayRef.current = el;
+    }
+    return () => { if (overlayRef.current) { overlayRef.current.remove(); overlayRef.current = null; } };
+  }, [overlay, ready]);
 
   return (
     <div>

@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS wallets (
 CREATE TABLE IF NOT EXISTS wallet_transactions (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   wallet_id BIGINT UNSIGNED NOT NULL,
-  type ENUM('topup','hold','release','refund','payout','penalty','commission') NOT NULL,
+  type ENUM('topup','hold','release','refund','payout','penalty','commission','withdrawal','compensation') NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
   related_booking_id BIGINT UNSIGNED NULL,
   note VARCHAR(300) NULL,

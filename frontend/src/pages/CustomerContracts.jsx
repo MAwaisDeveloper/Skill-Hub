@@ -72,7 +72,7 @@ export default function CustomerContracts() {
     setError(''); setMsg(''); setReleasing(no);
     try {
       const res = await api.post(`/customer/contracts/${contractId}/milestones/${no}/release`, {}, token);
-      setMsg(`✓ Milestone ${no} released! Amount Rs ${Number(res.amount).toLocaleString()} — commission Rs ${Number(res.commission).toLocaleString()} (10%) cut, professional ko Rs ${Number(res.pro_received).toLocaleString()} mile.${res.contract_status === 'completed' ? ' 🎉 Contract COMPLETE ho gaya!' : ` Baqi milestones: ${res.milestones_left}`}`);
+      setMsg(`✓ Milestone ${no} released! Amount Rs ${Number(res.amount).toLocaleString()} — commission Rs ${Number(res.commission).toLocaleString()} (10%), the provider received Rs ${Number(res.pro_received).toLocaleString()}.${res.contract_status === 'completed' ? ' 🎉 Contract completed!' : ` Remaining milestones: ${res.milestones_left}`}`);
       await openMilestones(contractId);
       await load();
     } catch (e) { setError(e.message); }
@@ -107,7 +107,7 @@ export default function CustomerContracts() {
             <input type="number" value={form.budget_max} onChange={set('budget_max')} />
             <label>Work Details</label>
             <textarea rows={4} value={form.description} onChange={set('description')} placeholder="Describe the work, location, requirements…" />
-            <button className="btn" onClick={create}>Post Contract (free — pay only when you award)</button>
+            <button className="btn" onClick={create}>Post Contract (free: pay only when you award)</button>
           </div>
         </div>
       </div>
@@ -157,7 +157,7 @@ export default function CustomerContracts() {
                 <button className="btn small secondary" onClick={() => openMilestones(c.id)}>📋 View Milestones (release payments)</button>
               ) : (
                 <>
-                  <h3 style={{ marginBottom: 8 }}>📋 Milestones — confirm the work, only then is payment released to the professional</h3>
+                  <h3 style={{ marginBottom: 8 }}>📋 Milestones: confirm the work, only then is payment released to the professional</h3>
                   <table>
                     <thead><tr><th>#</th><th>Description</th><th>Amount</th><th>Status</th><th></th></tr></thead>
                     <tbody>
@@ -172,7 +172,7 @@ export default function CustomerContracts() {
                               <button
                                 className="btn small"
                                 disabled={releasing === m.milestone_no}
-                                onClick={() => { if (window.confirm(`Confirm milestone ${m.milestone_no}? Rs ${Number(m.amount).toLocaleString()} will be released (10% commission deducted, 90% goes to the professional).`)) releaseMs(c.id, m.milestone_no); }}
+                                onClick={() => { if (window.confirm(`Confirm milestone ${m.milestone_no}? Rs ${Number(m.amount).toLocaleString()} will be released (0% service charges (free launch offer) deducted, 90% goes to the professional).`)) releaseMs(c.id, m.milestone_no); }}
                               >
                                 {releasing === m.milestone_no ? '⏳…' : '✓ Confirm & Release'}
                               </button>
@@ -183,14 +183,14 @@ export default function CustomerContracts() {
                       ))}
                     </tbody>
                   </table>
-                  <p className="muted mt" style={{ fontSize: 13 }}>A 10% platform commission is deducted on each release — the remaining 90% goes to the professional's wallet. Milestones are released in order.</p>
+                  <p className="muted mt" style={{ fontSize: 13 }}>A 10% platform commission is deducted on each release: the remaining 90% goes to the professional's wallet. Milestones are released in order.</p>
                 </>
               )}
             </div>
           )}
         </div>
       ))}
-      {contracts.length === 0 && <div className="card"><Empty icon="📑">No contracts yet — post one above.</Empty></div>}
+      {contracts.length === 0 && <div className="card"><Empty icon="📑">No contracts yet: post one above.</Empty></div>}
     </Layout>
   );
 }

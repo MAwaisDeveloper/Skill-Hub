@@ -17,9 +17,26 @@ export default function BookingFlow() {
   const [slots, setSlots] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [form, setForm] = useState({ category_id: '', area: '', date: '', slot_time: '', address_id: '', description: '', final_price: '', is_urgent: false });
+  const [addingAddress, setAddingAddress] = useState(false);
+  const [addrForm, setAddrForm] = useState({ label: 'home', area: '', full_address: '', latitude: '', longitude: '' });
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null);
   const [fallbackUsed, setFallbackUsed] = useState(false);
+
+  const saveInlineAddress = async () => {
+    setError('');
+    try {
+      const saved = await api.post('/customer/me/addresses', {
+        ...addrForm,
+        latitude: addrForm.latitude ? Number(addrForm.latitude) : null,
+        longitude: addrForm.longitude ? Number(addrForm.longitude) : null,
+      }, token);
+      const fresh = await api.get('/customer/me/addresses', token);
+      setAddresses(fresh);
+      setForm((f) => ({ ...f, address_id: String(saved.id) }));
+      setAddingAddress(false);
+    } catch (e) { setError(e.message); }
+  };
 
   useEffect(() => {
     api.get('/customer/categories').then(setCategories).catch(() => {});
@@ -85,13 +102,16 @@ export default function BookingFlow() {
   };
 
   return (
-    <Layout title="Book a Service" subtitle="Search verified professionals, pick a slot, secure the deal — full protection">
+    <Layout title="Book a Service" subtitle="Describe the job, pick a verified provider, confirm the price — your money stays escrow-protected until the work is done.">
       <Steps steps={['What & Where', 'Choose Professional', 'Confirm & Price', 'Secure Payment']} current={step - 1} />
       {error && <div className="alert error">{error}</div>}
 
       {step === 1 && (
         <div className="card">
           <h2>1. What do you need?</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: -6 }}>
+            Tell us the service and where you need it. Next, you will pick a verified provider and a time slot: nothing is charged until you confirm the price.
+          </p>
           <label>Category</label>
           <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
             <option value="">Select category</option>
@@ -99,7 +119,7 @@ export default function BookingFlow() {
           </select>
           <label>Area</label>
           <input value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="e.g. Gulberg III" />
-          <label>Date (optional — to filter by slot)</label>
+          <label>Date (optional: to filter by slot)</label>
           <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           <label>Time slot (optional)</label>
           <select value={form.slot_time} onChange={(e) => setForm({ ...form, slot_time: e.target.value })}>
@@ -108,11 +128,11 @@ export default function BookingFlow() {
           </select>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
             <input type="checkbox" checked={form.is_urgent} onChange={(e) => setForm({ ...form, is_urgent: e.target.checked })} style={{ width: 'auto', margin: 0 }} />
-            ⚡ Urgent / ASAP — sirf abhi available professionals dikhao
+            ⚡ Urgent / ASAP: show only professionals available right now
           </label>
-          <label>Job details (this is what the professional sees — what needs to be done, number of rooms/units, etc.)</label>
+          <label>Job details (the provider sees this: what needs to be done, number of rooms/units, etc.)</label>
           <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="e.g. Fix wiring in 2 rooms and install 3 fans; I already have the material" />
-          <label>Your budget expectation (optional — the professional can send an offer)</label>
+          <label>Your budget expectation (optional: the provider can send a counter-offer)</label>
           <input type="number" value={form.final_price} onChange={(e) => setForm({ ...form, final_price: e.target.value })} placeholder="e.g. 3000" style={{ maxWidth: 220 }} />
           <button className="btn" onClick={search}>🔍 Search Professionals</button>
         </div>
@@ -122,9 +142,9 @@ export default function BookingFlow() {
         <div className="card">
           <h2>2. Choose a Professional</h2>
           {fallbackUsed && (
-            <div className="alert warn">No professional is currently available in this area — check these <b>verified professionals</b> (in your category), or change the area and search again.</div>
+            <div className="alert warn">No professional is currently available in this area: check these <b>verified professionals</b> (in your category), or change the area and search again.</div>
           )}
-          {!pros.length && <p className="muted">No verified professional found — try again without the category filter.</p>}
+          {!pros.length && <p className="muted">No verified professional found: try again without the category filter.</p>}
           <div className="grid cols-2">
             {pros.map((p) => (
               <div className="card" key={p.id}>
@@ -149,11 +169,33 @@ export default function BookingFlow() {
           <h2>3. Confirm Details — {pro.full_name}</h2>
           {addresses.length === 0 && (
             <div className="alert warn">
-              📍 You have no saved address yet — go to <a href="/customer/profile">Profile & Addresses</a> and add one (with a map pin), then book from there.
+              📍 <b>No saved address yet.</b> Your service address is where the provider will come: add it once (with a map pin) and it will appear here automatically for every booking.
+              <div style={{ marginTop: 10 }}>
+                {addingAddress ? (
+                  <div style={{ maxWidth: 520 }}>
+                    <label>Label</label>
+                    <select value={addrForm.label} onChange={(e) => setAddrForm({ ...addrForm, label: e.target.value })}>
+                      {['home', 'work', 'other'].map((l) => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+                    </select>
+                    <label>Area</label>
+                    <input value={addrForm.area} onChange={(e) => setAddrForm({ ...addrForm, area: e.target.value })} placeholder="e.g. Gulberg III" />
+                    <label>Full Address</label>
+                    <textarea rows={2} value={addrForm.full_address} onChange={(e) => setAddrForm({ ...addrForm, full_address: e.target.value })} placeholder="House/flat, street, landmark…" />
+                    <p className="muted" style={{ fontSize: 13 }}>💡 Tap the map to drop the pin at your exact location: this is where the provider will navigate.</p>
+                    <MapPicker lat={addrForm.latitude ? Number(addrForm.latitude) : null} lng={addrForm.longitude ? Number(addrForm.longitude) : null} onChange={(la, ln) => setAddrForm((f) => ({ ...f, latitude: String(la), longitude: String(ln) }))} height={220} />
+                    <div className="row">
+                      <button className="btn" onClick={saveInlineAddress} disabled={!addrForm.full_address?.trim()}>Save Address</button>
+                      <button className="btn secondary" onClick={() => setAddingAddress(false)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="btn" onClick={() => setAddingAddress(true)}>📍 Add Address Now</button>
+                )}
+              </div>
             </div>
           )}
           {addresses.length > 0 && !form.address_id && (
-            <div className="alert info">📍 Select your service address — the map pin preview appears below.</div>
+            <div className="alert info">📍 Select your service address: the map pin preview appears below.</div>
           )}
           <p className="muted mb">📍 Service location map (confirmed from the address pin):</p>
           <MapPicker
@@ -180,7 +222,7 @@ export default function BookingFlow() {
           </select>
           <label>Work Description</label>
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
-          <label>Final Price (Rs) — locked at booking time</label>
+          <label>Final Price (Rs): locked at booking time</label>
           <input type="number" value={form.final_price} onChange={(e) => setForm({ ...form, final_price: e.target.value })} />
           <button className="btn" onClick={create} disabled={!form.date || !form.final_price || !form.address_id}>Create Booking</button>
         </div>

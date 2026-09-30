@@ -50,24 +50,34 @@ function PagedTable({ endpoint, filters = {}, columns, rowKey = (r) => r.id, emp
   );
 }
 
-// Pagination refetches via filters.page — setFilters passed through to PagedTable.
-const TABS = ['overview', 'verifications', 'bookings', 'disputes', 'wallets', 'transactions', 'topups', 'penalties', 'refunds', 'messages', 'payouts', 'users', 'reports', 'settings'];
+// Tabs are URL-driven (/admin?tab=transactions): every sidebar section opens directly,
+// the active section is bookmarkable, and browser back/forward works naturally.
+const VALID_TABS = ['overview', 'verifications', 'bookings', 'disputes', 'wallets', 'transactions', 'topups', 'penalties', 'refunds', 'messages', 'payouts', 'users', 'reports', 'settings'];
+const TAB_TITLES = {
+  overview: 'Admin Overview',
+  verifications: 'Verification Queue',
+  bookings: 'All Bookings',
+  disputes: 'Dispute Resolution',
+  wallets: 'User Wallets',
+  transactions: 'All Wallet Transactions',
+  topups: 'Wallet Top-ups',
+  penalties: 'Professional Penalties',
+  refunds: 'Refund Records',
+  messages: 'Flagged Messages',
+  payouts: 'Withdrawals & Payouts',
+  users: 'Users & Roles',
+  reports: 'Reports & Service Charges',
+  settings: 'Platform Rules',
+};
 
 export default function AdminDashboard() {
   const { session } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const token = session?.token;
-  const [tab, setTab] = useState(location.state?.tab || 'overview');
-
-  // Sidebar link (state.tab) par click → turant us tab par switch
-  useEffect(() => {
-    if (location.state?.tab) {
-      setTab(location.state.tab);
-      // state clear karo taake back/forward par dobara na chale
-      navigate(location.pathname, { replace: true, state: null });
-    }
-  }, [location.state?.tab]);
+  const requestedTab = new URLSearchParams(location.search).get('tab');
+  const tab = VALID_TABS.includes(requestedTab) ? requestedTab : 'overview';
+  const setTab = (t) => navigate(`/admin?tab=${t}`);
   const [stats, setStats] = useState(null);
   const [queue, setQueue] = useState([]);
   const [disputes, setDisputes] = useState([]);
@@ -87,6 +97,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [wdNote, setWdNote] = useState({});   // withdrawal id -> note text (inline input)
   const [wdAction, setWdAction] = useState({}); // withdrawal id -> 'complete' | 'rejected' (confirm pending)
+  const [resolution, setResolution] = useState({}); // dispute id -> { outcome, admin_note }
 
   const load = async () => {
     try {
@@ -108,41 +119,49 @@ export default function AdminDashboard() {
   const review = async (professionalId, decision) => {
     setError(''); setMsg('');
     try {
-      const notes = decision === 'rejected' ? prompt('Rejection reason (customer/pro ko dikhega):') || 'documents not clear' : 'CNIC valid, selfie matched';
+      const notes = decision === 'rejected' ? prompt('Rejection reason (shown to the provider):') || 'documents not clear' : 'CNIC valid, selfie matched';
       await api.post(`/admin/verifications/${professionalId}/review`, { decision, notes }, token);
       setMsg(`Professional ${decision}`);
       await load();
     } catch (e) { setError(e.message); }
   };
 
-  const resolveDispute = async (disputeId, outcome) => {
+  const resolveDispute = async (disputeId, outcome, admin_note) => {
+    setError(''); setMsg('');
     try {
-      const resolution = prompt('Resolution note:') || 'resolved';
-      await api.post(`/admin/disputes/${disputeId}/resolve`, { outcome, resolution }, token);
-      setMsg('Dispute resolved');
+      await api.post(`/admin/disputes/${disputeId}/resolve`, { outcome, admin_note }, token);
+      const labels = { customer: 'full refund issued to the customer', professional: 'payment released to the professional', split: 'split 50/50 (no service charges during free launch)' };
+      setMsg(`Dispute #${disputeId} resolved — ${labels[outcome] || outcome}`);
+      setResolution((r) => ({ ...r, [disputeId]: undefined }));
       await load();
     } catch (e) { setError(e.message); }
+  };
+
+  const setRes = (id, patch) => setResolution((r) => ({ ...r, [id]: { outcome: r[id]?.outcome || 'split', admin_note: r[id]?.admin_note || '', ...patch } }));
+
+  // Backend resolve math ka mirror — preview amounts (commission settings se, editable 'splitPercent' optional)
+  const disputePreview = (amount) => {
+    const s = Object.fromEntries((settings || []).map((x) => [x.setting_key, x.setting_value]));
+    const pct = Number(s.commissionPercent ?? 10);
+    const commission = Math.round(Number(amount) * (pct / 100) * 100) / 100;
+    const half = Math.round((Number(amount) - commission) / 2 * 100) / 100;
+    return { pct, commission, half, amount: Number(amount) };
   };
 
   const resolveWithdrawal = async (id, action, note) => {
     try {
       await api.post(`/admin/withdrawals/${id}/resolve`, { action, note }, token);
-      setMsg(action === 'complete' ? `Withdrawal completed — transfer reference: ${note || '—'}` : 'Withdrawal rejected — paisa user ke wallet mein wapas aa gaya');
+      setMsg(action === 'complete' ? `Withdrawal completed — transfer reference: ${note || '—'}` : 'Withdrawal rejected — the amount has been returned to the user\'s wallet');
       setWdNote({ ...wdNote, [id]: undefined });
       setWdAction({ ...wdAction, [id]: undefined });
       await load();
     } catch (e) { setError(e.message); }
   };
 
-  const dirOf = (type) => (['topup', 'refund', 'payout'].includes(type) ? 'in' : 'out');
+  const dirOf = (type) => (['topup', 'refund', 'payout', 'compensation'].includes(type) ? 'in' : 'out');
 
   return (
-    <Layout title="Admin Panel" subtitle="Everything, with filters + pagination. Users see only their own data — admin sees the whole system.">
-      <div className="filters" style={{ marginBottom: 14 }}>
-        {TABS.map((t) => (
-          <button key={t} className={`btn small ${tab === t ? '' : 'secondary'}`} onClick={() => setTab(t)}>{t}</button>
-        ))}
-      </div>
+    <Layout title={TAB_TITLES[tab]} subtitle={tab === 'overview' ? 'Platform health at a glance — open any section from the sidebar.' : 'Full platform visibility with filters and pagination.'}>
       {msg && <div className="alert success">{msg}</div>}
       {error && <div className="alert error">{error}</div>}
 
@@ -152,11 +171,11 @@ export default function AdminDashboard() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 34 }}>🏦</div>
               <div style={{ flex: 1 }}>
-                <div className="muted">Platform Commission Wallet (Hunar revenue)</div>
+                <div className="muted">Platform Service Charges Wallet (platform revenue)</div>
                 <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--green-deep)' }}>{fmt(stats.platform_balance ?? 0)}</div>
               </div>
               <div style={{ textAlign: 'right', fontSize: 13 }} className="muted">
-                <div>Bookings commission + cancellation platform share + contract milestone commission<br />Sab releases par automatic credit hoti hai</div>
+                <div>Service charges from bookings + contract milestones<br />Credited automatically on every release</div>
               </div>
             </div>
           </div>
@@ -164,14 +183,14 @@ export default function AdminDashboard() {
             <div className="card stat"><span className="value">{stats.pending_verifications}</span><span className="label">Pending Verifications</span></div>
             <div className="card stat"><span className="value">{stats.active_bookings}</span><span className="label">Active Bookings</span></div>
             <div className="card stat"><span className="value">{stats.open_disputes}</span><span className="label">Open Disputes</span></div>
-            <div className="card stat"><span className="value">{fmt(stats.total_commission)}</span><span className="label">Total Commission</span></div>
+            <div className="card stat"><span className="value">{fmt(stats.total_commission)}</span><span className="label">Total Service Charges</span></div>
             <div className="card stat"><span className="value">{stats.total_customers}</span><span className="label">Customers</span></div>
             <div className="card stat"><span className="value">{stats.total_professionals}</span><span className="label">Professionals</span></div>
           </div>
           <div className="card">
-            <h2>Latest Commission Report (daily)</h2>
+            <h2>Latest Service Charges Report (daily)</h2>
             <table>
-              <thead><tr><th>Date</th><th>Deals</th><th>Commission</th></tr></thead>
+              <thead><tr><th>Date</th><th>Deals</th><th>Service Charges</th></tr></thead>
               <tbody>{commissions.slice(0, 7).map((r) => (<tr key={r.day}><td>{r.day}</td><td>{r.deals}</td><td className="td-amt-in">{fmt(r.commission)}</td></tr>))}</tbody>
             </table>
           </div>
@@ -180,7 +199,7 @@ export default function AdminDashboard() {
 
       {tab === 'verifications' && (
         <div className="card">
-          <h2>Verification Queue — manual CNIC + selfie review</h2>
+          <h2>Verification Queue: manual CNIC + selfie review</h2>
           {queue.length === 0 && <p className="muted">Queue empty.</p>}
           {queue.map((p) => (
             <div className="card" key={p.id} style={{ boxShadow: 'none' }}>
@@ -243,12 +262,15 @@ export default function AdminDashboard() {
 
       {tab === 'disputes' && (
         <div className="card">
-          <h2>Disputes — funds stay held until resolution</h2>
+          <h2>Disputes: funds stay held until resolution</h2>
           {disputes.length === 0 && <p className="muted">No disputes.</p>}
           <table>
             <thead><tr><th>Booking</th><th>Amount</th><th>Description</th><th>Status</th><th>Resolve</th></tr></thead>
             <tbody>
-              {disputes.map((d) => (
+              {disputes.map((d) => {
+                const st = resolution[d.id] || {};
+                const prev = disputePreview(d.final_price);
+                return (
                 <tr key={d.id}>
                   <td><b>{d.booking_code}</b></td>
                   <td>{fmt(d.final_price)}</td>
@@ -256,15 +278,48 @@ export default function AdminDashboard() {
                   <td><StatusBadge status={d.status} /></td>
                   <td>
                     {d.status === 'open' ? (
-                      <div className="row">
-                        <button className="btn small" onClick={() => resolveDispute(d.id, 'customer')}>Customer</button>
-                        <button className="btn small" onClick={() => resolveDispute(d.id, 'professional')}>Pro</button>
-                        <button className="btn small secondary" onClick={() => resolveDispute(d.id, 'split')}>Split</button>
+                      <div style={{ minWidth: 300 }}>
+                        <div className="row" role="radiogroup" aria-label="Resolution outcome" style={{ flexWrap: 'wrap', gap: 10 }}>
+                          {[
+                            ['customer', `Customer (+${fmt(prev.amount)})`],
+                            ['professional', `Pro (+${fmt(prev.amount - prev.commission)})`],
+                            ['split', 'Split 50/50'],
+                          ].map(([val, label]) => (
+                            <label key={val} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              <input
+                                type="radio"
+                                name={`outcome-${d.id}`}
+                                value={val}
+                                checked={(st.outcome || 'split') === val}
+                                onChange={() => setRes(d.id, { outcome: val })}
+                              />
+                              {' '}{label}
+                            </label>
+                          ))}
+                        </div>
+                        {(st.outcome || 'split') === 'split' && (
+                          <p className="muted" style={{ fontSize: 12, margin: '6px 0' }}>
+                            Preview: Service Charges <b>Rs {prev.commission}</b> ({prev.pct}%) · Customer +<b>{fmt(prev.half)}</b> · Pro +<b>{fmt(prev.half)}</b>
+                          </p>
+                        )}
+                        <textarea
+                          rows={2}
+                          placeholder="Admin note (included in both parties' notifications)…"
+                          value={st.admin_note || ''}
+                          onChange={(e) => setRes(d.id, { admin_note: e.target.value })}
+                          style={{ width: '100%', marginBottom: 6 }}
+                        />
+                        <div className="row">
+                          <button className="btn small" onClick={() => resolveDispute(d.id, st.outcome || 'split', st.admin_note)}>
+                            ✓ Resolve ({st.outcome || 'split'})
+                          </button>
+                        </div>
                       </div>
                     ) : d.resolution}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -273,7 +328,7 @@ export default function AdminDashboard() {
       {tab === 'wallets' && (
         <>
           <div className="card">
-            <h2>All User Wallets — balance + escrow + pending penalty</h2>
+            <h2>All User Wallets: balance + escrow + pending penalty</h2>
             <div className="filters">
               <select value={walletFilters.role} onChange={(e) => setWalletFilters({ ...walletFilters, role: e.target.value })}>
                 <option value="">All Roles</option>
@@ -313,13 +368,13 @@ export default function AdminDashboard() {
               </select>
               <select value={txnFilters.type} onChange={(e) => setTxnFilters({ ...txnFilters, type: e.target.value })}>
                 <option value="">All Types</option>
-                {['topup', 'hold', 'release', 'refund', 'payout', 'penalty', 'commission'].map((t) => <option key={t} value={t}>{t}</option>)}
+                {['topup', 'hold', 'release', 'refund', 'payout', 'penalty', 'commission', 'withdrawal', 'compensation'].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
               <input type="date" value={txnFilters.from} onChange={(e) => setTxnFilters({ ...txnFilters, from: e.target.value })} />
               <input type="date" value={txnFilters.to} onChange={(e) => setTxnFilters({ ...txnFilters, to: e.target.value })} />
               <button className="btn small secondary" onClick={() => { setTxnFilters({ user_id: '', type: '', direction: '', from: '', to: '' }); setSelectedWalletUser(null); }}>Reset</button>
             </div>
-            <p className="muted">Direction: <b>in</b> = topup/refund/payout credit · <b>out</b> = hold/release/penalty/commission cut.</p>
+            <p className="muted">Direction: <b>in</b> = topup/refund/payout/compensation credit · <b>out</b> = hold/release/penalty/commission/withdrawal.</p>
           </div>
           <PagedTable
             endpoint="/admin/wallet-transactions"
@@ -419,7 +474,7 @@ export default function AdminDashboard() {
       {tab === 'messages' && (
         <>
           <div className="card">
-            <h2>Chat Messages (audit) — off-platform attempts flagged</h2>
+            <h2>Chat Messages (audit): off-platform attempts flagged</h2>
             <div className="filters">
               <select value={msgFilter.flagged} onChange={(e) => setMsgFilter({ flagged: e.target.value })}>
                 <option value="">All Messages</option>
@@ -445,7 +500,7 @@ export default function AdminDashboard() {
       {tab === 'payouts' && (
         <>
           <div className="card">
-            <h2>Withdrawal Requests (JazzCash/Easypaisa) — approve transfers</h2>
+            <h2>Withdrawal Requests (JazzCash/Easypaisa): approve transfers</h2>
             {withdrawals.length === 0 && <p className="muted">No withdrawal requests.</p>}
             {withdrawals.length > 0 && (
               <table>
@@ -465,7 +520,7 @@ export default function AdminDashboard() {
                             <div className="row">
                               <input
                                 style={{ maxWidth: 180 }}
-                                placeholder={wdAction[w.id] === 'complete' ? 'Transfer ref (e.g. TID 8829…)' : 'Reject reason (user ko dikhega)'}
+                                placeholder={wdAction[w.id] === 'complete' ? 'Transfer ref (e.g. TID 8829…)' : 'Reject reason (shown to the user)'}
                                 value={wdNote[w.id] || ''}
                                 onChange={(e) => setWdNote({ ...wdNote, [w.id]: e.target.value })}
                                 onKeyDown={(e) => e.key === 'Enter' && resolveWithdrawal(w.id, wdAction[w.id], wdNote[w.id] || '')}
@@ -495,7 +550,7 @@ export default function AdminDashboard() {
       {tab === 'users' && (
         <>
           <div className="card">
-            <h2>All Users — role filter + search (full directory with role badges)</h2>
+            <h2>All Users: role filter + search (full directory with role badges)</h2>
             <div className="filters">
               <select value={userFilters.role} onChange={(e) => setUserFilters({ ...userFilters, role: e.target.value })}>
                 <option value="">All Roles</option>
@@ -534,9 +589,9 @@ export default function AdminDashboard() {
 
       {tab === 'reports' && (
         <div className="card">
-          <h2>Commission Report (daily)</h2>
+          <h2>Service Charges Report (daily)</h2>
           <table>
-            <thead><tr><th>Date</th><th>Deals</th><th>Commission</th></tr></thead>
+            <thead><tr><th>Date</th><th>Deals</th><th>Service Charges</th></tr></thead>
             <tbody>{commissions.map((r) => (<tr key={r.day}><td>{r.day}</td><td>{r.deals}</td><td className="td-amt-in">{fmt(r.commission)}</td></tr>))}</tbody>
           </table>
         </div>
@@ -544,7 +599,7 @@ export default function AdminDashboard() {
 
       {tab === 'settings' && (
         <div className="card">
-          <h2>Platform Settings (Admin-configurable — cancellation/commission rules live from here)</h2>
+          <h2>Platform Settings (Admin-configurable: cancellation, service charges and release rules)</h2>
           <table>
             <thead><tr><th>Key</th><th>Value</th><th>Meaning</th></tr></thead>
             <tbody>

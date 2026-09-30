@@ -36,7 +36,7 @@ export default function CustomerWallet() {
 
   const checkTitle = async () => {
     setError(''); setTitle(null);
-    if (!/^03\d{9}$/.test(topup.mobile_number.trim())) { setError('Sahi mobile number likhein (03XXXXXXXXX)'); return; }
+    if (!/^03\d{9}$/.test(topup.mobile_number.trim())) { setError('Please enter a valid mobile number (03XXXXXXXXX).'); return; }
     setChecking(true);
     try {
       const res = await api.post('/customer/wallet/account-title', { provider: topup.provider, mobile_number: topup.mobile_number.trim() }, token);
@@ -48,7 +48,7 @@ export default function CustomerWallet() {
   const startTopup = async () => {
     setError(''); setMsg('');
     if (!(Number(topup.amount) >= 100)) { setError('Minimum top-up Rs 100 hai'); return; }
-    if (title && !title.found) { setError('Is number par koi account registered nahi (Not Found). Number check karein.'); return; }
+    if (title && !title.found) { setError('No account is registered on this number (Not Found). Please check the number.'); return; }
     try {
       const res = await api.post('/customer/wallet/topup', { ...topup, amount: Number(topup.amount), mobile_number: topup.mobile_number.trim() }, token);
       navigate(res.redirect_url);
@@ -69,7 +69,7 @@ export default function CustomerWallet() {
   const score = Number(trust?.score ?? 100);
 
   return (
-    <Layout title="My Wallet" subtitle="Balance, escrow aur transactions — sab kuch ek jagah, bilkul mobile wallet ki tarah">
+    <Layout title="My Wallet" subtitle="Balance, escrow and transactions — everything in one place, just like a mobile wallet">
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert success">{msg}</div>}
 
@@ -78,7 +78,7 @@ export default function CustomerWallet() {
         <div>
           <div className="wh-label">Available Balance</div>
           <div className="wh-amount">{wallet ? fmt(wallet.balance) : '…'}</div>
-          <div className="wh-sub">🔒 Held (escrow): <b>{wallet ? fmt(wallet.held_amount) : '…'}</b> — active bookings ke liye locked</div>
+          <div className="wh-sub">🔒 Held (escrow): <b>{wallet ? fmt(wallet.held_amount) : '…'}</b> — locked for active bookings</div>
         </div>
         <div className="wh-side">
           <div className="wh-trust">
@@ -92,7 +92,7 @@ export default function CustomerWallet() {
       <div className="grid cols-3">
         <a className="card stat" href="/customer/wallet" style={{ textDecoration: 'none' }}>
           <span className="value" style={{ fontSize: 20 }}>⬆️ Add Money</span>
-          <span className="label">JazzCash / Easypaisa se</span>
+          <span className="label">via JazzCash / Easypaisa</span>
         </a>
         <Link className="card stat" to="/customer/withdraw" style={{ textDecoration: 'none' }}>
           <span className="value" style={{ fontSize: 20 }}>💸 Withdraw</span>
@@ -107,9 +107,9 @@ export default function CustomerWallet() {
       {/* Add Money card */}
       <div className="card">
         <h2>⬆️ Add Money (JazzCash / Easypaisa)</h2>
-        <p className="muted mb">Real case ki tarah: pehle number par registered <b>naam verify</b> karein, phir amount dalein — secure gateway page par PIN mangwaya jayega (Hunar kabhi PIN nahi dekhta).</p>
+        <p className="muted mb">Just like a real gateway: first <b>verify the account title</b> registered on the number, then enter the amount: the secure gateway page will ask for your PIN (Hunar never sees it).</p>
 
-        <label>1. Provider select karein</label>
+        <label>1. Choose your payment provider</label>
         <div className="provider-cards">
           {PROVIDERS.map((p) => (
             <button key={p.key} type="button" className={`provider-card ${p.cls} ${topup.provider === p.key ? 'active' : ''}`} onClick={() => { setTopup({ ...topup, provider: p.key }); setTitle(null); }}>
@@ -121,7 +121,7 @@ export default function CustomerWallet() {
 
         <div className="grid cols-2" style={{ gap: 14, marginTop: 8 }}>
           <div>
-            <label>2. Aap ka {topup.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} number</label>
+            <label>2. Your {topup.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} number</label>
             <div className="row">
               <input style={{ maxWidth: 200 }} placeholder="03XXXXXXXXX" maxLength={11} value={topup.mobile_number}
                 onChange={(e) => { setTopup({ ...topup, mobile_number: e.target.value }); setTitle(null); }} />
@@ -130,11 +130,11 @@ export default function CustomerWallet() {
             {title && (
               title.found
                 ? <div className="alert success mt">✅ Account holder: <b>{title.account_title}</b> <span className="muted">({title.source})</span></div>
-                : <div className="alert error mt">❌ <b>Not Found</b> — is number par koi {topup.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} account registered nahi. Number dobara check karein.</div>
+                : <div className="alert error mt">❌ <b>Not Found</b> — no {topup.provider === 'jazzcash' ? 'JazzCash' : 'Easypaisa'} account is registered on this number. Please double-check.</div>
             )}
           </div>
           <div>
-            <label>3. Amount (Rs) — minimum 100</label>
+            <label>3. Amount (Rs): minimum 100</label>
             <input type="number" placeholder="e.g. 5000" min={100} value={topup.amount} onChange={(e) => setTopup({ ...topup, amount: e.target.value })} />
             <div className="row" style={{ marginTop: 4 }}>
               {[1000, 2000, 5000, 10000].map((v) => (
@@ -149,7 +149,7 @@ export default function CustomerWallet() {
       <StatementView
         fetcher={fetchStatement}
         title="Transaction History"
-        subtitle="Har entry mein counterparty ka naam, booking code aur balance-after. Direction, type ya date se filter karein — default latest week."
+        subtitle="Every entry shows the counterparty name, booking code and resulting balance. Filter by direction, type or date — defaults to the latest week."
       />
     </Layout>
   );

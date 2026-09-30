@@ -30,7 +30,7 @@ export default function InvoicePage() {
           <div className="row spread" style={{ borderBottom: '2px solid var(--green)', paddingBottom: 12 }}>
             <div>
               <h2 style={{ color: 'var(--green-dark)' }}>Hunar<span style={{ color: 'var(--gold)' }}>.</span> Invoice</h2>
-              <div className="muted">Verified Skill, Trusted Service — Lahore</div>
+              <div className="muted">Verified Skill, Trusted Service: Lahore</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div><b>{inv.invoice_number}</b></div>
@@ -62,7 +62,7 @@ export default function InvoicePage() {
           </table>
 
           <p className="muted mt" style={{ fontSize: 12 }}>
-            Ye invoice Hunar platform par auto-generate hui hai. Escrow-protected payment — commission sirf release
+            Ye invoice Hunar platform par auto-generate hui hai. Escrow-protected payment: commission sirf release
             par deduct hoti hai. Support: admin@hunar.pk
           </p>
         </div>

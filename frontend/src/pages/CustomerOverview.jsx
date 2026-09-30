@@ -32,25 +32,25 @@ export default function CustomerOverview() {
       {/* New-user onboarding checklist — naya user kuch sochay bina start kar sake */}
       {bookings.length === 0 && (
         <div className="card onboarding">
-          <h2>🚀 Shuru karein — 3 asaan steps</h2>
+          <h2>🚀 Get started: 3 easy steps</h2>
           <div className="onb-steps">
             <div className={`onb-step ${bookings.length ? 'done' : ''}`}>
               <span className="n">{bookings.length ? '✓' : '1'}</span>
-              <div><b>Address add karein</b><div className="muted">Profile &amp; Addresses par map pin ke sath</div></div>
+              <div><b>Add your address</b><div className="muted">With a map pin, in Profile &amp; Addresses</div></div>
               {!bookings.length && <Link to="/customer/profile" className="btn small">Add</Link>}
             </div>
             <div className="onb-step">
               <span className="n">2</span>
-              <div><b>Wallet mein paise dalein</b><div className="muted">JazzCash/Easypaisa se — 1 minute</div></div>
+              <div><b>Add money to wallet</b><div className="muted">Via JazzCash / Easypaisa: takes a minute</div></div>
               <Link to="/customer/wallet" className="btn small">Add Money</Link>
             </div>
             <div className="onb-step">
               <span className="n">3</span>
-              <div><b>Service book karein</b><div className="muted">Verified professional, escrow-protected payment</div></div>
+              <div><b>Book a service</b><div className="muted">Verified provider, escrow-protected payment</div></div>
               <Link to="/book" className="btn small gold">Book Now</Link>
             </div>
           </div>
-          <p className="muted mt">💡 Kaise chalta hai? <Link to="/guide">How Hunar Works</Link> — 2 minute mein samajh jayen.</p>
+          <p className="muted mt">💡 New here? <Link to="/guide">How Hunar Works</Link> explains everything in a 2-minute read.</p>
         </div>
       )}
 
@@ -64,13 +64,13 @@ export default function CustomerOverview() {
       {/* Offers / late-arrival actions — deal yahin finalize hota hai */}
       {bookings.filter((b) => b.offer_status === 'pending' && b.status === 'waiting_for_professional').length > 0 && (
         <div className="card" style={{ borderLeft: '4px solid var(--gold)' }}>
-          <h2>💼 Pending Offers — Deal Finalize Karein</h2>
-          <p className="muted">Professionals ne aap ki request par apni price offer ki hai:</p>
+          <h2>💼 Pending Offers: Deal Finalize Karein</h2>
+          <p className="muted">Providers have sent price offers on your requests:</p>
           {bookings.filter((b) => b.offer_status === 'pending').map((b) => (
             <div className="row spread mb" key={b.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
               <div>
                 <b>{b.professional_name}</b> — {b.category_name} · offer <b>Rs {Number(b.offered_price).toLocaleString()}</b>
-                {Number(b.offered_price) !== Number(b.final_price) && <span className="muted"> (aap ki budget: {fmt(b.final_price)})</span>}
+                {Number(b.offered_price) !== Number(b.final_price) && <span className="muted"> (your budget: {fmt(b.final_price)})</span>}
                 <div className="muted" style={{ fontSize: 13 }}>{b.description?.slice(0, 90)}</div>
               </div>
               <Link to={`/bookings/${b.id}`} className="btn small">Accept / Reject →</Link>
@@ -81,7 +81,7 @@ export default function CustomerOverview() {
 
       {bookings.filter((b) => b.late_notified === 1 && b.late_approved === 0 && ['accepted', 'on_the_way'].includes(b.status)).length > 0 && (
         <div className="card" style={{ borderLeft: '4px solid var(--danger)' }}>
-          <h2>⏰ Late Arrivals — Action Required</h2>
+          <h2>⏰ Late Arrivals: Action Required</h2>
           {bookings.filter((b) => b.late_notified === 1 && b.late_approved === 0).map((b) => (
             <div className="row spread mb" key={b.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
               <div><b>{b.professional_name}</b> is running late on {b.booking_code} — approve (no deduction) or cancel (100% refund)</div>
@@ -96,7 +96,7 @@ export default function CustomerOverview() {
           <h2>Recent Bookings</h2>
           <Link to="/customer/bookings" className="btn small secondary">View All</Link>
         </div>
-        {bookings.length === 0 && <Empty icon="🧰">No bookings yet — book your first verified professional.</Empty>}
+        {bookings.length === 0 && <Empty icon="🧰">No bookings yet: book your first verified professional.</Empty>}
         {bookings.length > 0 && (
           <table>
             <thead><tr><th>Code</th><th>Service</th><th>Professional</th><th>When</th><th>Price</th><th>Status</th><th></th></tr></thead>
@@ -130,7 +130,7 @@ export default function CustomerOverview() {
           <h2>🛡 Platform guarantee</h2>
           <p className="muted">
             Every professional is manually verified (CNIC + live selfie matched by our team) before they can receive a
-            single booking. Phone numbers stay hidden — all chat happens inside Hunar, and cash-deal attempts are
+            single booking. Phone numbers stay hidden: all chat happens inside Hunar, and cash-deal attempts are
             flagged automatically.
           </p>
         </div>

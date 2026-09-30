@@ -1,72 +1,110 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api, saveSession } from '../api';
 import { useApp } from '../context';
+import { validateEmail } from '../validation';
+
+const ROLE_HOME = { customer: '/customer', professional: '/professional', admin: '/admin' };
 
 export default function Login() {
   const { login } = useApp();
   const navigate = useNavigate();
+  const loc = useLocation();
   const [tab, setTab] = useState('password'); // password | otp | admin | forgot
-  const [form, setForm] = useState({ identifier: '', password: '' });
-  const [phone, setPhone] = useState('');
+  const [form, setForm] = useState({ email: '', password: '' });
   const [otp, setOtp] = useState('');
+  const [otpSentTo, setOtpSentTo] = useState('');
   const [devOtp, setDevOtp] = useState(null);
-  const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [fieldErr, setFieldErr] = useState({});
 
-  const go = (role) => navigate(role === 'customer' ? '/customer' : role === 'professional' ? '/professional' : '/admin');
+  const setF = (k, sanitizer, max) => (e) => {
+    let v = e.target.value;
+    if (sanitizer) v = sanitizer(v);
+    if (max) v = v.slice(0, max);
+    setForm({ ...form, [k]: v });
+    setFieldErr((f) => ({ ...f, [k]: '' }));
+  };
 
-  const wrap = async (fn, okMsg) => {
+  const go = (role) => {
+    const from = loc.state?.from;
+    if (from && role !== 'admin') navigate(from);
+    else navigate(ROLE_HOME[role] || '/customer');
+  };
+
+  const wrap = async (fn) => {
     setError(''); setMsg(''); setBusy(true);
     try {
-      const res = await fn();
-      if (okMsg) setMsg(okMsg(res));
-      return res;
+      return await fn();
     } catch (e) { setError(e.message); return null; }
     finally { setBusy(false); }
   };
 
   const passwordLogin = async () => {
-    const data = await wrap(() => api.post('/auth/password/login', form));
+    const emailErr = validateEmail(form.email);
+    const pwdErr = !form.password ? 'Password is required.' : '';
+    setFieldErr({ email: emailErr, password: pwdErr });
+    if (emailErr || pwdErr) return;
+    const data = await wrap(() => api.post('/auth/password/login', { identifier: form.email.trim(), password: form.password }));
     if (data) { saveSession(data); login(data); go(data.user.role); }
   };
 
   const requestOtp = async () => {
-    const res = await wrap(() => api.post('/auth/otp/request', { phone }));
-    if (res) { setDevOtp(res.dev_otp || null); setStep(2); setMsg('OTP bhej diya gaya — apna phone check karein.'); }
+    const emailErr = validateEmail(form.email);
+    setFieldErr({ email: emailErr });
+    if (emailErr) return;
+    const res = await wrap(() => api.post('/auth/otp/request', { email: form.email.trim() }));
+    if (res) { setDevOtp(res.dev_otp || null); setOtpSentTo(res.sent_to || form.email.trim()); setMsg('OTP sent to your email. Enter it below to sign in.'); }
   };
 
   const verifyOtp = async () => {
-    const data = await wrap(() => api.post('/auth/otp/verify', { phone, otp }));
+    if (otp.length < 6) { setFieldErr({ otp: 'Enter the complete 6-digit code.' }); return; }
+    setFieldErr({});
+    const data = await wrap(() => api.post('/auth/otp/verify', { email: form.email.trim(), otp }));
     if (data) { saveSession(data); login(data); go(data.user.role); }
   };
 
   const adminLogin = async () => {
-    const data = await wrap(() => api.post('/auth/admin/login', { phone, password: form.password }));
+    const idf = form.email.trim();
+    const idErr = idf.includes('@') ? validateEmail(idf) : (!idf ? 'Phone or email required.' : '');
+    const pwdErr = !form.password ? 'Password is required.' : '';
+    setFieldErr({ email: idErr, password: pwdErr });
+    if (idErr || pwdErr) return;
+    const data = await wrap(() => api.post('/auth/admin/login', { phone: idf, password: form.password }));
     if (data) { saveSession(data); login(data); go('admin'); }
   };
 
   const forgot = async () => {
-    const res = await wrap(() => api.post('/auth/forgot', { identifier: form.identifier }));
+    const emailErr = validateEmail(form.email);
+    setFieldErr({ email: emailErr });
+    if (emailErr) return;
+    const res = await wrap(() => api.post('/auth/forgot', { email: form.email.trim() }));
     if (res) {
-      setPhone(res.phone);
       setDevOtp(res.dev_otp || null);
-      setMsg(`OTP bhej diya gaya ${res.phone} par — code enter karein.`);
-      setStep(2);
+      setOtpSentTo(res.sent_to || form.email.trim());
+      setMsg('Reset code sent to your email. Enter it with a new password.');
     }
   };
 
   const reset = async () => {
-    if (!form.password || form.password.length < 8) { setError('Naya password kam az kam 8 characters ka hona chahiye'); return; }
-    const res = await wrap(() => api.post('/auth/reset', { phone, otp, new_password: form.password }));
+    if (otp.length < 6) { setFieldErr({ otp: 'Enter the 6-digit code from your email.' }); return; }
+    if (!form.password || form.password.length < 8) { setFieldErr({ password: 'New password must be at least 8 characters.' }); return; }
+    setFieldErr({});
+    const res = await wrap(() => api.post('/auth/reset', { email: form.email.trim(), otp, new_password: form.password }));
     if (res) {
-      setMsg('✓ Password change ho gaya — ab naye password se login karein.');
-      setTab('password'); setStep(1); setDevOtp(null); setOtp('');
-      setForm({ identifier: form.identifier, password: '' });
+      setMsg('✓ Password changed. Sign in with your email and new password.');
+      setTab('password'); setDevOtp(null); setOtp('');
+      setForm({ email: form.email, password: '' });
     }
   };
+
+  const errMsg = (k) => (fieldErr[k] ? <p className="field-error">{fieldErr[k]}</p> : null);
+  const Count = ({ v, min, max }) => (
+    <span className={`char-count ${v.length > max || (min && v.length > 0 && v.length < min) ? 'over' : v.length ? 'ok' : ''}`}>{v.length}{max ? `/${max}` : ''}</span>
+  );
 
   return (
     <div className="auth-split">
@@ -74,100 +112,201 @@ export default function Login() {
       <div className="auth-brand">
         <div>
           <div className="auth-brand-logo"><span className="logo-dot" /> Hunar<span>.</span></div>
-          <h1>Verified Skill,<br />Trusted Service.</h1>
-          <p>Ghar ke har kaam ke liye verified professionals — AC technician, electrician, plumber, painter aur mazeed.</p>
+          <h1>Welcome back to your <em>Hunar</em> account.</h1>
+          <p>Manage your bookings, wallet and service requests, all from one secure place, with escrow-protected payments every time.</p>
           <ul className="auth-points">
-            <li>✓ Har professional CNIC + selfie verified</li>
-            <li>✓ Paisa escrow mein — kaam confirm hone par hi release</li>
-            <li>✓ Live location tracking + in-app chat</li>
-            <li>✓ JazzCash / Easypaisa se foran payment</li>
+            <li><b>🔒 Escrow-protected payments</b><span>Money is released only when the work is done right</span></li>
+            <li><b>✓ Verified professionals</b><span>Every professional passes CNIC + live selfie verification</span></li>
+            <li><b>⚡ Instant JazzCash / Easypaisa</b><span>Add or withdraw money in seconds, not days</span></li>
           </ul>
         </div>
-        <div className="auth-brand-foot">Lahore · Free-tier open-source platform</div>
+        <div className="auth-stats">
+          <span className="chip">1000+ Verified professionals</span>
+          <span className="chip">98% Satisfaction rate</span>
+          <span className="chip">4.9★ Average rating</span>
+        </div>
+        <div className="auth-brand-foot">© 2026 Hunar · Lahore · Verified Skill, Trusted Service</div>
       </div>
 
       {/* Right form panel */}
       <div className="auth-form-wrap">
         <div className="auth-card">
-          <h1>{tab === 'forgot' ? '🔐 Password Reset' : 'Welcome back 👋'}</h1>
-          <p className="sub">{tab === 'forgot' ? 'Apna registered email ya phone likhein — hum OTP bhejenge.' : 'Apne Hunar account mein login karein'}</p>
-
-          {tab !== 'forgot' && (
-            <div className="tabs">
-              <button className={`tab ${tab === 'password' ? 'active' : ''}`} onClick={() => { setTab('password'); setError(''); setMsg(''); }}>Password Login</button>
-              <button className={`tab ${tab === 'otp' ? 'active' : ''}`} onClick={() => { setTab('otp'); setStep(1); setError(''); setMsg(''); }}>OTP Login</button>
-              <button className={`tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setError(''); setMsg(''); }}>Admin</button>
-            </div>
+          {tab === 'forgot' ? (
+            <>
+              <h1>Reset your password</h1>
+              <p className="sub">Enter your registered email. We will send a one-time code, then you can set a new password and sign in.</p>
+            </>
+          ) : tab === 'admin' ? (
+            <>
+              <h1>Administrator sign in</h1>
+              <p className="sub">Platform management access</p>
+            </>
+          ) : (
+            <>
+              <h1>Sign In</h1>
+              <p className="sub">Enter your email and password to access your dashboard</p>
+            </>
           )}
 
           {error && <div className="alert error">{error}</div>}
           {msg && <div className="alert success">{msg}</div>}
 
+          {tab !== 'forgot' && (
+            <div className="tabs">
+              <button className={`tab ${tab === 'password' ? 'active' : ''}`} onClick={() => { setTab('password'); setFieldErr({}); setError(''); setMsg(''); }}>Email & Password</button>
+              <button className={`tab ${tab === 'otp' ? 'active' : ''}`} onClick={() => { setTab('otp'); setFieldErr({}); setError(''); setMsg(''); }}>Email OTP</button>
+              <button className={`tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setFieldErr({}); setError(''); setMsg(''); }}>Admin</button>
+            </div>
+          )}
+
           {tab === 'password' && (
             <>
-              <label>Email ya Phone</label>
-              <input value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} placeholder="ali@example.com ya 03001234567" autoFocus />
-              <label>Password</label>
-              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="••••••••" onKeyDown={(e) => e.key === 'Enter' && passwordLogin()} />
-              <button className="btn" style={{ width: '100%' }} onClick={passwordLogin} disabled={busy}>{busy ? '⏳ Logging in…' : 'Login'}</button>
-              <p className="muted mt">
-                <a href="#" onClick={(e) => { e.preventDefault(); setTab('forgot'); setStep(1); setMsg(''); setError(''); }}>Forgot password?</a>
-                {' · '}New here? <Link to="/register"><b>Create an account</b></Link>
-              </p>
-              <p className="muted" style={{ fontSize: 12.5 }}>Demo: OTP tab se phone <b>03001234567</b> (customer) try karein.</p>
+              <div className="label-row"><label>Email Address</label><Count v={form.email} max={254} /></div>
+              <input
+                className={fieldErr.email ? 'invalid' : ''}
+                value={form.email}
+                onChange={setF('email', (v) => v.trim(), 254)}
+                placeholder="ali@gmail.com"
+                inputMode="email"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && passwordLogin()}
+              />
+              {errMsg('email')}
+
+              <div className="label-row" style={{ marginTop: 8 }}><label>Password</label><Count v={form.password} min={8} max={64} /></div>
+              <div className="pwd-wrap">
+                <input
+                  className={fieldErr.password ? 'invalid' : ''}
+                  type={showPwd ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={setF('password', null, 64)}
+                  placeholder="Your password"
+                  onKeyDown={(e) => e.key === 'Enter' && passwordLogin()}
+                />
+                <button type="button" className="pwd-eye" onClick={() => setShowPwd(!showPwd)} aria-label={showPwd ? 'Hide password' : 'Show password'}>{showPwd ? '🙈' : '👁'}</button>
+              </div>
+              {errMsg('password')}
+
+              <div className="row spread" style={{ margin: '2px 0 10px' }}>
+                <a href="#" className="muted" style={{ fontSize: 13 }} onClick={(e) => { e.preventDefault(); setTab('forgot'); setFieldErr({}); setMsg(''); setError(''); }}>Forgot password?</a>
+              </div>
+              <button className="btn btn-block btn-lg" onClick={passwordLogin} disabled={busy}>{busy ? 'Signing in…' : 'Sign In'}</button>
+              <div className="auth-alt mt">
+                <b>Don't have an account yet?</b>
+                <span className="muted">Join thousands of verified users and get started today.</span>
+                <Link to="/register" className="auth-alt-link">Create your free account →</Link>
+              </div>
+              <p className="muted auth-legal">By signing in, you agree to our <a href="/privacy">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.</p>
             </>
           )}
 
           {tab === 'otp' && (
             <>
-              <label>Phone Number</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="03XXXXXXXXX" disabled={step === 2} autoFocus={step === 1} />
-              {step === 1 && <button className="btn" style={{ width: '100%' }} onClick={requestOtp} disabled={busy || !phone}>{busy ? '⏳ Sending…' : 'Send OTP'}</button>}
-              {step === 2 && (
+              <div className="label-row"><label>Email Address</label><Count v={form.email} max={254} /></div>
+              <input
+                className={fieldErr.email ? 'invalid' : ''}
+                value={form.email}
+                onChange={setF('email', (v) => v.trim(), 254)}
+                placeholder="ali@gmail.com"
+                inputMode="email"
+                disabled={!!otpSentTo && !msg.includes('sent')}
+                autoFocus
+              />
+              {errMsg('email')}
+              {!otpSentTo ? (
+                <button className="btn btn-block btn-lg" onClick={requestOtp} disabled={busy || !form.email}>{busy ? 'Sending…' : 'Send OTP to Email'}</button>
+              ) : (
                 <>
-                  {devOtp && <div className="alert warn">Dev OTP: <b>{devOtp}</b> (SMS gateway integration pending)</div>}
-                  <label>Enter 6-digit OTP</label>
-                  <input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="••••••" maxLength={6} onKeyDown={(e) => e.key === 'Enter' && verifyOtp()} autoFocus />
-                  <button className="btn" style={{ width: '100%' }} onClick={verifyOtp} disabled={busy}>{busy ? '⏳ Verifying…' : 'Verify & Login'}</button>
-                  <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setStep(1); setOtp(''); setMsg(''); }}>← Change number / resend</a></p>
+                  {devOtp && <div className="alert warn">Dev OTP: <b>{devOtp}</b> (email delivery integration pending)</div>}
+                  <div className="label-row" style={{ marginTop: 8 }}><label>Enter 6-digit OTP</label><Count v={otp} max={6} /></div>
+                  <input
+                    className={`otp-input ${fieldErr.otp ? 'invalid' : ''}`}
+                    value={otp}
+                    onChange={(e) => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setFieldErr((f) => ({ ...f, otp: '' })); }}
+                    placeholder="••••••"
+                    maxLength={6}
+                    inputMode="numeric"
+                    onKeyDown={(e) => e.key === 'Enter' && verifyOtp()}
+                    autoFocus
+                  />
+                  {errMsg('otp')}
+                  <button className="btn btn-block btn-lg" onClick={verifyOtp} disabled={busy || otp.length < 6}>{busy ? 'Verifying…' : 'Verify & Sign In'}</button>
+                  <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setOtpSentTo(''); setOtp(''); setMsg(''); }}>← Change email / resend</a></p>
                 </>
               )}
-              <p className="muted mt">Password login bhi available hai — upar tabs se switch karein. <Link to="/register">Register</Link></p>
+              <p className="muted mt">Prefer a password? Switch to the <b>Email & Password</b> tab. <Link to="/register">Create an account</Link></p>
             </>
           )}
 
           {tab === 'admin' && (
             <>
-              <label>Admin Phone</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="03000000000" autoFocus />
-              <label>Password</label>
-              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && adminLogin()} />
-              <button className="btn" style={{ width: '100%' }} onClick={adminLogin} disabled={busy}>{busy ? '⏳ Logging in…' : 'Login as Admin'}</button>
+              <label>Admin Phone or Email</label>
+              <input
+                className={fieldErr.email ? 'invalid' : ''}
+                value={form.email}
+                onChange={setF('email', null, 254)}
+                placeholder="03000000000"
+                autoFocus
+              />
+              {errMsg('email')}
+              <div className="label-row" style={{ marginTop: 8 }}><label>Password</label><Count v={form.password} max={64} /></div>
+              <input
+                type="password"
+                className={fieldErr.password ? 'invalid' : ''}
+                value={form.password}
+                onChange={setF('password', null, 64)}
+                onKeyDown={(e) => e.key === 'Enter' && adminLogin()}
+              />
+              {errMsg('password')}
+              <button className="btn btn-block btn-lg" onClick={adminLogin} disabled={busy}>{busy ? 'Signing in…' : 'Sign in as Administrator'}</button>
               <p className="muted mt">Demo: 03000000000 / Admin@123</p>
             </>
           )}
 
           {tab === 'forgot' && (
             <>
-              {step === 1 && (
+              <div className="label-row"><label>Registered Email</label><Count v={form.email} max={254} /></div>
+              <input
+                className={fieldErr.email ? 'invalid' : ''}
+                value={form.email}
+                onChange={setF('email', (v) => v.trim(), 254)}
+                placeholder="The email on your account"
+                inputMode="email"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && !otpSentTo && forgot()}
+              />
+              {errMsg('email')}
+              {!otpSentTo ? (
+                <button className="btn btn-block btn-lg" onClick={forgot} disabled={busy || !form.email}>{busy ? 'Sending…' : 'Send Reset Code'}</button>
+              ) : (
                 <>
-                  <label>Registered Email ya Phone</label>
-                  <input value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} placeholder="jis number/email par account hai" autoFocus onKeyDown={(e) => e.key === 'Enter' && forgot()} />
-                  <button className="btn" style={{ width: '100%' }} onClick={forgot} disabled={busy || !form.identifier}>{busy ? '⏳ Sending…' : 'Send Reset OTP'}</button>
+                  {devOtp && <div className="alert warn">Dev OTP: <b>{devOtp}</b> ({otpSentTo})</div>}
+                  <div className="label-row" style={{ marginTop: 8 }}><label>OTP (sent to {otpSentTo})</label><Count v={otp} max={6} /></div>
+                  <input
+                    className={`otp-input ${fieldErr.otp ? 'invalid' : ''}`}
+                    value={otp}
+                    onChange={(e) => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setFieldErr((f) => ({ ...f, otp: '' })); }}
+                    placeholder="••••••"
+                    maxLength={6}
+                    inputMode="numeric"
+                    autoFocus
+                  />
+                  {errMsg('otp')}
+                  <div className="label-row" style={{ marginTop: 8 }}><label>New Password (minimum 8 characters)</label><Count v={form.password} max={64} /></div>
+                  <input
+                    type="password"
+                    className={fieldErr.password ? 'invalid' : ''}
+                    value={form.password}
+                    onChange={setF('password', null, 64)}
+                    placeholder="••••••••"
+                    onKeyDown={(e) => e.key === 'Enter' && reset()}
+                  />
+                  {errMsg('password')}
+                  <button className="btn btn-block btn-lg" onClick={reset} disabled={busy}>{busy ? 'Resetting…' : 'Reset Password'}</button>
+                  <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setOtpSentTo(''); setOtp(''); setMsg(''); }}>← Change email / resend</a></p>
                 </>
               )}
-              {step === 2 && (
-                <>
-                  {devOtp && <div className="alert warn">Dev OTP: <b>{devOtp}</b> ({phone})</div>}
-                  <label>OTP (bheja gaya {phone} par)</label>
-                  <input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="6-digit code" maxLength={6} autoFocus />
-                  <label>Naya Password (min 8 characters)</label>
-                  <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="••••••••" onKeyDown={(e) => e.key === 'Enter' && reset()} />
-                  <button className="btn" style={{ width: '100%' }} onClick={reset} disabled={busy}>{busy ? '⏳ Resetting…' : 'Reset Password'}</button>
-                  <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setStep(1); setOtp(''); setMsg(''); }}>← Number change karein</a></p>
-                </>
-              )}
-              <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setTab('password'); setStep(1); setError(''); setMsg(''); }}>← Back to login</a></p>
+              <p className="muted mt"><a href="#" onClick={(e) => { e.preventDefault(); setTab('password'); setFieldErr({}); setError(''); setMsg(''); }}>← Back to sign in</a></p>
             </>
           )}
         </div>

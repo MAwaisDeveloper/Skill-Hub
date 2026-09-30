@@ -73,7 +73,7 @@ export default function TopupGateway() {
                   <span className="k">From</span><span>{isJazz ? 'JazzCash' : 'Easypaisa'} · {topup.mobile_number}</span>
                   <span className="k">Reference</span><span>{topup.gateway_transaction_ref}</span>
                 </div>
-                <label style={{ marginTop: 14 }}>MPIN (4-5 digits — demo mein koi bhi chalega)</label>
+                <label style={{ marginTop: 14 }}>MPIN (4-5 digits: demo mein koi bhi chalega)</label>
                 <input type="password" inputMode="numeric" maxLength={5} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="• • • •" style={{ textAlign: 'center', fontSize: 22, letterSpacing: 10 }} onKeyDown={(e) => e.key === 'Enter' && pay()} />
                 <button className={`btn ${isJazz ? 'gw-btn-jazz' : 'gw-btn-easy'}`} style={{ width: '100%' }} onClick={pay} disabled={processing}>
                   {processing ? '⏳ Processing…' : `Pay Rs ${Number(topup.amount).toLocaleString()}`}
