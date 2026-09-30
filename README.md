@@ -91,13 +91,13 @@ npm run dev                 # UI on http://localhost:5173 (proxies /api to :4000
 
 ## Live Deployment (Vercel)
 
-Live URL: **https://skill-hub-ten-psi.vercel.app** (single Vercel project, repo root)
+Live URL: **https://skillhub.vercel.app** (single Vercel project, repo root)
 
 The built SPA (`frontend/dist`, committed) is served statically and every `/api/*` request is rewritten to root `api/index.php` (Vercel runs PHP functions only from the root `api/` folder), which forwards to the Node API. Two modes (set in Vercel Dashboard > Settings > Environment Variables):
 
 1. **`API_BASE` mode (full API - recommended)**
    - Host `backend/` (Express) on any Node host: Render / Railway / Fly.io (build: `npm install`, start: `npm start`).
-   - Create a hosted MySQL (Clever Cloud / Aiven free), then on the Node host set `DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, CLIENT_URL=https://skill-hub-ten-psi.vercel.app` and run `npm run migrate` once (schema + seed).
+   - Create a hosted MySQL (Clever Cloud / Aiven free), then on the Node host set `DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, CLIENT_URL=https://skillhub.vercel.app` and run `npm run migrate` once (schema + seed).
    - In Vercel set `API_BASE=https://<your-node-api>`; `/api/*` is proxied through the PHP bridge.
 2. **`MIRROR_DB` mode (no Node host needed for auth basics)**
    - In Vercel set `MIRROR_DB=1` + `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` + `JWT_SECRET`.
